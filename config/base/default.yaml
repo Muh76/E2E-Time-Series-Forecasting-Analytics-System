@@ -15,6 +15,20 @@ data:
   # processed_uri: "gs://my-bucket/processed"
 
 # ---------------------------------------------------------------------------
+# Feature engineering (lag, rolling, calendar)
+# ---------------------------------------------------------------------------
+feature_engineering:
+  date_column: "date"
+  target_column: "target_cleaned"
+  entity_column: "store_id"
+  lag:
+    lags: [1, 7, 14]
+  rolling:
+    windows: [7, 14]
+    min_periods: 1
+  calendar: {}
+
+# ---------------------------------------------------------------------------
 # Model parameters (used by forecasting layer)
 # ---------------------------------------------------------------------------
 model:
