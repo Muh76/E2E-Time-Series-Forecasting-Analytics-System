@@ -3,7 +3,7 @@ Run the ETL pipeline end-to-end: load config, run pipeline, save parquet, log su
 
 Usage (from project root):
     python scripts/run_etl.py
-    python scripts/run_etl.py --raw-file data/raw/sales.csv --env local
+    python scripts/run_etl.py --raw-file data/raw/target.csv --env local
 
 Requires: PyYAML (pip install pyyaml), pandas, pyarrow (for parquet).
 """
@@ -61,7 +61,7 @@ def main() -> None:
         "--raw-file",
         type=Path,
         default=None,
-        help="Path to raw CSV (default: data/raw/sales.csv from config).",
+        help="Path to raw CSV (default: data/raw/target.csv from config).",
     )
     parser.add_argument(
         "--output-file",
@@ -80,7 +80,7 @@ def main() -> None:
         type=str,
         choices=("generic", "retail"),
         default="retail",
-        help="Pipeline mode: retail (date, store_id, sales) or generic.",
+        help="Pipeline mode: retail (date, store_id, target) or generic.",
     )
     parser.add_argument(
         "--no-validate",
@@ -101,7 +101,7 @@ def main() -> None:
     raw_dir = PROJECT_ROOT / data_cfg.get("raw_path", "data/raw")
     processed_dir = PROJECT_ROOT / data_cfg.get("processed_path", "data/processed")
 
-    raw_file = args.raw_file or raw_dir / "sales.csv"
+    raw_file = args.raw_file or raw_dir / "target.csv"
     if not raw_file.is_absolute():
         raw_file = PROJECT_ROOT / raw_file
     output_file = args.output_file or processed_dir / "etl_output.parquet"

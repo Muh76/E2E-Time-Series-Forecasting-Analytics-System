@@ -70,7 +70,7 @@ def clean_values(
     Args:
         df: DataFrame with at least a value column.
         config: Optional clean config. Expected keys (all optional):
-            - value_column: Name of value column (default "value").
+            - value_column: Name of value column (default "target").
             - drop_null_value: If True, drop rows where value is NA (default True).
             - clip_lower: If set, clip value to this lower bound.
             - clip_upper: If set, clip value to this upper bound.
@@ -82,7 +82,7 @@ def clean_values(
         New DataFrame with cleaned values and optional deduplication applied.
     """
     cfg = config or {}
-    value_col = cfg.get("value_column", "value")
+    value_col = cfg.get("value_column", "target")
     date_col = cfg.get("date_column", "date")
     drop_null = cfg.get("drop_null_value", True)
     clip_lower = cfg.get("clip_lower")
@@ -160,16 +160,16 @@ def clean_retail(
     - Handles missing dates by reindexing to a full daily range (per store or global).
     - Applies a configurable missing-value strategy (forward-fill or zero) for added dates.
     - Optionally clips outliers on the cleaned series (absolute bounds or IQR).
-    - Preserves the original sales column and adds a cleaned column (e.g. sales_cleaned).
+    - Preserves the original target column and adds a cleaned column (e.g. target_cleaned).
 
     Args:
-        df: DataFrame with columns date, store_id, sales (or config overrides).
+        df: DataFrame with columns date, store_id, target (or config overrides).
             Must have unique (date, store_id). Call validate_retail first if needed.
         config: Optional. Keys (all optional):
             - date_column: default "date".
             - store_id_column: default "store_id".
-            - sales_column: default "sales".
-            - filled_column: name of cleaned column (default "sales_cleaned").
+            - target_column: default "target".
+            - filled_column: name of cleaned column (default "target_cleaned").
             - missing_dates: "reindex" (fill to daily frequency) or "none" (no reindex).
             - date_range: "per_store" (min–max per store) or "global" (min–max over all).
             - missing_value_strategy: "forward_fill" or "zero".
@@ -182,20 +182,20 @@ def clean_retail(
                 Clipping is applied to the cleaned column only.
 
     Returns:
-        DataFrame with date, store_id, original sales column, and filled_column
-        (sales_cleaned by default). Sorted by date, store_id.
+        DataFrame with date, store_id, original target column, and filled_column
+        (target_cleaned by default). Sorted by date, store_id.
     """
     cfg = config or {}
     date_col = cfg.get("date_column", "date")
     store_col = cfg.get("store_id_column", "store_id")
-    sales_col = cfg.get("sales_column", "sales")
-    filled_col = cfg.get("filled_column", "sales_cleaned")
+    target_col = cfg.get("target_column", "target")
+    filled_col = cfg.get("filled_column", "target_cleaned")
     missing_dates = cfg.get("missing_dates", "reindex")
     date_range = cfg.get("date_range", "per_store")
     fill_strategy = cfg.get("missing_value_strategy", "forward_fill")
     clip_cfg = cfg.get("outlier_clip") or {}
 
-    for col in (date_col, store_col, sales_col):
+    for col in (date_col, store_col, target_col):
         if col not in df.columns:
             raise ValueError(f"clean_retail requires column '{col}'. Found: {list(df.columns)}.")
 
@@ -203,7 +203,7 @@ def clean_retail(
     out[date_col] = pd.to_datetime(out[date_col]).dt.normalize()
 
     if missing_dates != "reindex":
-        out[filled_col] = out[sales_col].astype(float)
+        out[filled_col] = out[target_col].astype(float)
         if clip_cfg.get("enabled"):
             out[filled_col] = _clip_series(out[filled_col], clip_cfg)
         return out.sort_values([date_col, store_col]).reset_index(drop=True)
@@ -211,7 +211,7 @@ def clean_retail(
     # Reindex to full daily range per store (or global)
     pieces: list[pd.DataFrame] = []
     for store_id, group in out.groupby(store_col, sort=False):
-        grp = group[[date_col, sales_col]].copy()
+        grp = group[[date_col, target_col]].copy()
         grp = grp.set_index(date_col).sort_index()
         min_d, max_d = grp.index.min(), grp.index.max()
         if date_range == "global":
@@ -223,11 +223,11 @@ def clean_retail(
         reindexed.index.name = date_col
         reindexed = reindexed.reset_index()
         reindexed[store_col] = store_id
-        # Preserve original sales (NaN for filled-in dates); set cleaned column from fill strategy
+        # Preserve original target (NaN for filled-in dates); set cleaned column from fill strategy
         if fill_strategy == "forward_fill":
-            reindexed[filled_col] = reindexed[sales_col].ffill()
+            reindexed[filled_col] = reindexed[target_col].ffill()
         else:
-            reindexed[filled_col] = reindexed[sales_col].fillna(0.0)
+            reindexed[filled_col] = reindexed[target_col].fillna(0.0)
         pieces.append(reindexed)
 
     out = pd.concat(pieces, ignore_index=True)
