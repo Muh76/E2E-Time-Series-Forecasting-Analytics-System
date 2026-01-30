@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.env
+.venv
+venv/
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Data & artifacts (keep structure, ignore large/binary)
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/feature_store/*
+!data/feature_store/.gitkeep
+artifacts/*
+!artifacts/.gitkeep
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Notebooks checkpoints
+.notebooks/
+*.ipynb_checkpoints/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Terraform / infra
+*.tfstate
+*.tfstate.*
+.terraform/
