@@ -1,0 +1,53 @@
+# Production environment — overrides only; rest from base/default.yaml
+# Paths and URIs point to production buckets/DBs.
+
+data:
+  base_dir: "data"
+  raw_path: "data/raw"
+  processed_path: "data/processed"
+  feature_store_path: "data/feature_store"
+  artifacts_path: "artifacts"
+  # Example: production GCS
+  # raw_uri: "gs://my-project-prod-raw/data"
+  # processed_uri: "gs://my-project-prod-processed/data"
+  # feature_store_uri: "gs://my-project-prod-features/data"
+  # artifacts_uri: "gs://my-project-prod-artifacts/models"
+
+model:
+  default_version_tag: "v1.0.0"
+
+evaluation:
+  thresholds:
+    mae_max: 8.0
+    rmse_max: 10.0
+    mape_max: 0.12
+
+monitoring:
+  performance:
+    thresholds:
+      mae_alert: 12.0
+      mape_alert: 0.15
+  alerts:
+    cooldown_minutes: 60
+    channels: ["slack", "pagerduty"]
+
+llm:
+  provider: "openai"
+  api_key_env: "LLM_API_KEY"
+  model: "gpt-4o"
+  temperature: 0.2
+  max_tokens: 512
+  timeout_seconds: 30
+  retries: 2
+
+api:
+  env: "prod"
+  debug: false
+  log_level: "WARNING"
+  host: "0.0.0.0"
+  port: 8000
+  workers: 4
+
+frontend:
+  api_base_url: "https://api.example.com"
+  page_title: "Time Series Forecasting & Analytics"

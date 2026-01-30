@@ -1,0 +1,52 @@
+# Staging environment — overrides for shared pre-production
+# Paths typically point to GCS or staging buckets.
+
+data:
+  base_dir: "data"
+  raw_path: "data/raw"
+  processed_path: "data/processed"
+  feature_store_path: "data/feature_store"
+  artifacts_path: "artifacts"
+  # Example: cloud URIs for staging
+  # raw_uri: "gs://my-project-staging-raw/data"
+  # processed_uri: "gs://my-project-staging-processed/data"
+  # feature_store_uri: "gs://my-project-staging-features/data"
+  # artifacts_uri: "gs://my-project-staging-artifacts/models"
+
+model:
+  default_version_tag: "v1.0.0-staging"
+
+evaluation:
+  thresholds:
+    mae_max: 10.0
+    rmse_max: 12.0
+    mape_max: 0.15
+
+monitoring:
+  performance:
+    thresholds:
+      mae_alert: 15.0
+      mape_alert: 0.20
+  alerts:
+    cooldown_minutes: 30
+    channels: []  # e.g. ["slack_staging"]
+
+llm:
+  provider: "openai"
+  api_key_env: "LLM_API_KEY"
+  model: "gpt-4o-mini"
+  temperature: 0.2
+  max_tokens: 512
+  timeout_seconds: 45
+
+api:
+  env: "staging"
+  debug: false
+  log_level: "INFO"
+  host: "0.0.0.0"
+  port: 8000
+  workers: 2
+
+frontend:
+  api_base_url: "https://staging-api.example.com"
+  page_title: "Time Series Forecasting & Analytics (Staging)"

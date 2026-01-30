@@ -1,0 +1,133 @@
+# Base configuration schema — placeholder values; override per environment.
+# Load order: default.yaml → {env}/config.yaml (e.g. local, staging, prod).
+
+# ---------------------------------------------------------------------------
+# Data paths (relative to project root or absolute)
+# ---------------------------------------------------------------------------
+data:
+  base_dir: "data"
+  raw_path: "data/raw"
+  processed_path: "data/processed"
+  feature_store_path: "data/feature_store"
+  artifacts_path: "artifacts"
+  # Optional: override for cloud (e.g. GCS buckets)
+  # raw_uri: "gs://my-bucket/raw"
+  # processed_uri: "gs://my-bucket/processed"
+
+# ---------------------------------------------------------------------------
+# Model parameters (used by forecasting layer)
+# ---------------------------------------------------------------------------
+model:
+  default_type: "prophet"  # e.g. prophet, arima, custom
+  default_version_tag: "v1.0.0"
+  params:
+    horizon_steps: 30
+    frequency: "D"       # D=daily, H=hourly, W=weekly
+    seasonality_mode: "multiplicative"
+    # Model-specific (example for Prophet-style)
+    yearly_seasonality: true
+    weekly_seasonality: true
+    daily_seasonality: false
+    changepoint_prior_scale: 0.05
+    seasonality_prior_scale: 10.0
+  interval:
+    enabled: true
+    level: 0.95          # prediction interval confidence
+
+# ---------------------------------------------------------------------------
+# Training settings (scripts/train.py)
+# ---------------------------------------------------------------------------
+training:
+  data:
+    train_start_date: "2020-01-01"   # placeholder
+    train_end_date: "2024-06-30"
+    validation_split: 0.2
+    min_observations: 30
+  optimization:
+    # Generic; interpretation depends on model type
+    max_iter: 100
+    tolerance: 1.0e-4
+  runtime:
+    n_jobs: -1           # -1 = use all cores
+    seed: 42
+  checkpoint:
+    save_best_only: true
+    dir: "artifacts/checkpoints"
+  early_stopping:
+    enabled: true
+    patience: 5
+    metric: "mae"
+    mode: "min"
+
+# ---------------------------------------------------------------------------
+# Evaluation thresholds (promotion / backtest gates)
+# ---------------------------------------------------------------------------
+evaluation:
+  metrics:
+    - "mae"
+    - "rmse"
+    - "mape"
+  thresholds:
+    mae_max: 10.0        # fail if MAE > this (example scale)
+    rmse_max: 12.0
+    mape_max: 0.15       # 15%
+  holdout:
+    end_date: "2024-12-31"  # last N or fixed date
+    min_observations: 14
+  promotion:
+    require_all_metrics_within_threshold: true
+
+# ---------------------------------------------------------------------------
+# Monitoring thresholds (alerts, drift, performance)
+# ---------------------------------------------------------------------------
+monitoring:
+  performance:
+    metrics:
+      - "mae"
+      - "mape"
+    thresholds:
+      mae_alert: 15.0    # alert if rolling MAE exceeds
+      mape_alert: 0.20   # 20%
+    window_days: 7       # rolling window for aggregates
+  drift:
+    enabled: true
+    threshold: 0.25      # e.g. PSI or custom score; alert if exceeded
+    min_sample_size: 100
+    check_schedule: "0 6 * * *"  # cron: daily 06:00
+  alerts:
+    cooldown_minutes: 60
+    channels: []        # e.g. ["slack", "email"]; configure per env
+
+# ---------------------------------------------------------------------------
+# LLM settings (copilot — explanation only, no prediction)
+# ---------------------------------------------------------------------------
+llm:
+  provider: "openai"     # openai, anthropic, azure_openai, etc.
+  # API key: never in config; use env var name
+  api_key_env: "LLM_API_KEY"
+  model: "gpt-4o-mini"   # placeholder
+  temperature: 0.3       # lower = more deterministic explanations
+  max_tokens: 512
+  timeout_seconds: 30
+  retries: 2
+  # Optional provider-specific
+  # base_url: null       # for Azure or custom endpoint
+
+# ---------------------------------------------------------------------------
+# Backend API (FastAPI)
+# ---------------------------------------------------------------------------
+api:
+  env: "local"           # local | staging | prod
+  debug: false
+  log_level: "INFO"
+  host: "0.0.0.0"
+  port: 8000
+  workers: 1
+  # CORS, rate limits, etc. can go here
+
+# ---------------------------------------------------------------------------
+# Frontend (Streamlit)
+# ---------------------------------------------------------------------------
+frontend:
+  api_base_url: "http://localhost:8000"  # override in staging/prod
+  page_title: "Time Series Forecasting & Analytics"
