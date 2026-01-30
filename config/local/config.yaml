@@ -1,0 +1,37 @@
+# Local environment — overrides only; rest from base/default.yaml
+# Use for development on a single machine.
+
+data:
+  base_dir: "data"
+  raw_path: "data/raw"
+  processed_path: "data/processed"
+  feature_store_path: "data/feature_store"
+  artifacts_path: "artifacts"
+
+model:
+  default_version_tag: "v1.0.0-local"
+
+training:
+  runtime:
+    n_jobs: 2
+  checkpoint:
+    dir: "artifacts/checkpoints"
+
+llm:
+  provider: "openai"
+  api_key_env: "LLM_API_KEY"
+  model: "gpt-4o-mini"
+  temperature: 0.3
+  max_tokens: 512
+
+api:
+  env: "local"
+  debug: true
+  log_level: "DEBUG"
+  host: "0.0.0.0"
+  port: 8000
+  workers: 1
+
+frontend:
+  api_base_url: "http://localhost:8000"
+  page_title: "Time Series Forecasting & Analytics (Local)"
