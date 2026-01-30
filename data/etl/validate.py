@@ -28,7 +28,7 @@ def _default_schema() -> dict[str, str]:
     """Default expected column names and dtypes for daily series."""
     return {
         "date": "datetime64[ns]",
-        "value": "float64",
+        "target": "float64",
     }
 
 
@@ -44,7 +44,7 @@ def validate_schema(
         config: Optional validation config. Expected keys (all optional):
             - required_columns: List of column names that must exist.
             - date_column: Name of date column (default "date").
-            - value_column: Name of value column (default "value").
+            - value_column: Name of value column (default "target").
             - allow_extra_columns: If True, extra columns are allowed (default True).
 
     Returns:
@@ -52,7 +52,7 @@ def validate_schema(
     """
     cfg = config or {}
     date_col = cfg.get("date_column", "date")
-    value_col = cfg.get("value_column", "value")
+    value_col = cfg.get("value_column", "target")
     required = cfg.get("required_columns") or [date_col, value_col]
     allow_extra = cfg.get("allow_extra_columns", True)
 
@@ -99,7 +99,7 @@ def validate_data(
         df: DataFrame with at least date and value columns.
         config: Optional validation config. Expected keys (all optional):
             - date_column: Name of date column (default "date").
-            - value_column: Name of value column (default "value").
+            - value_column: Name of value column (default "target").
             - series_column: If set, (date, series_column) must be unique.
             - allow_missing_value: If True, missing values in value column are
               allowed (default False).
@@ -112,7 +112,7 @@ def validate_data(
     """
     cfg = config or {}
     date_col = cfg.get("date_column", "date")
-    value_col = cfg.get("value_column", "value")
+    value_col = cfg.get("value_column", "target")
     series_col = cfg.get("series_column")
     allow_missing = cfg.get("allow_missing_value", False)
     min_rows = cfg.get("min_rows", 1)
@@ -153,7 +153,7 @@ def validate_data(
 # Retail time series validation (raises on failure)
 # ---------------------------------------------------------------------------
 
-REQUIRED_RETAIL_COLUMNS = ("date", "store_id", "sales")
+REQUIRED_RETAIL_COLUMNS = ("date", "store_id", "target")
 
 
 def validate_retail(
@@ -164,30 +164,30 @@ def validate_retail(
     Validate retail time series data: schema and data rules.
 
     Checks:
-    - Required columns exist: date, store_id, sales (or config overrides).
+    - Required columns exist: date, store_id, target (or config overrides).
     - Date column is datetime.
     - No duplicate (date, store_id) pairs.
-    - Sales values are non-negative.
+    - Target values are non-negative.
     - Time index is strictly monotonic per store (dates increasing per store_id).
 
     Args:
         df: DataFrame to validate (e.g. after load_retail_sales_csv).
         config: Optional. Keys: date_column (default "date"), store_id_column
-            (default "store_id"), sales_column (default "sales").
+            (default "store_id"), target_column (default "target").
 
     Returns:
         None on success.
 
     Raises:
         ValueError: With a single message listing all failed checks (one or more
-            of: missing columns, date not datetime, duplicates, negative sales,
+            of: missing columns, date not datetime, duplicates, negative target,
             non-monotonic dates per store).
     """
     cfg = config or {}
     date_col = cfg.get("date_column", "date")
     store_col = cfg.get("store_id_column", "store_id")
-    sales_col = cfg.get("sales_column", "sales")
-    required = (date_col, store_col, sales_col)
+    target_col = cfg.get("target_column", "target")
+    required = (date_col, store_col, target_col)
 
     errors: list[str] = []
 
@@ -196,7 +196,7 @@ def validate_retail(
     if missing:
         errors.append(
             f"Missing required columns: {missing}. "
-            f"Expected: date, store_id, sales (or config overrides). Found: {list(df.columns)}."
+            f"Expected: date, store_id, target (or config overrides). Found: {list(df.columns)}."
         )
     if errors:
         raise ValueError("\n".join(errors))
@@ -224,18 +224,18 @@ def validate_retail(
     if errors:
         raise ValueError("\n".join(errors))
 
-    # 4. Sales non-negative
-    if not pd.api.types.is_numeric_dtype(df[sales_col]):
+    # 4. Target non-negative
+    if not pd.api.types.is_numeric_dtype(df[target_col]):
         errors.append(
-            f"Column '{sales_col}' must be numeric. Got dtype: {df[sales_col].dtype}."
+            f"Column '{target_col}' must be numeric. Got dtype: {df[target_col].dtype}."
         )
     else:
-        neg = (df[sales_col] < 0).sum()
+        neg = (df[target_col] < 0).sum()
         if neg > 0:
-            min_sales = df[sales_col].min()
+            min_target = df[target_col].min()
             errors.append(
-                f"Sales must be non-negative. Found {int(neg)} negative value(s). "
-                f"Min value: {min_sales}. Column: '{sales_col}'."
+                f"Target must be non-negative. Found {int(neg)} negative value(s). "
+                f"Min value: {min_target}. Column: '{target_col}'."
             )
     if errors:
         raise ValueError("\n".join(errors))

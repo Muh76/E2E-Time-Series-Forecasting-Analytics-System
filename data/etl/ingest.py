@@ -81,6 +81,7 @@ def load_retail_sales_csv(
             - date_column: Name of date column (default "date").
             - entity_column: Name of entity column for sorting, e.g. store_id
               (default "store_id").
+            - target_column: Name of target value column (default "target").
             - encoding: File encoding (default "utf-8").
             - date_errors: Passed to pd.to_datetime: "raise" (default) or "coerce".
         **read_csv_kwargs: Passed to pd.read_csv (e.g. sep, skiprows).
@@ -104,6 +105,7 @@ def load_retail_sales_csv(
 
     date_column = cfg.get("date_column", "date")
     entity_column = cfg.get("entity_column", "store_id")
+    target_column = cfg.get("target_column", "target")
     encoding = cfg.get("encoding", "utf-8")
     date_errors = cfg.get("date_errors", "raise")
 
@@ -117,7 +119,7 @@ def load_retail_sales_csv(
     if df.empty:
         raise ValueError(f"Retail sales CSV has no rows: {file_path}")
 
-    missing = [c for c in (date_column, entity_column) if c not in df.columns]
+    missing = [c for c in (date_column, entity_column, target_column) if c not in df.columns]
     if missing:
         raise ValueError(
             f"Retail sales CSV missing required columns: {missing}. "

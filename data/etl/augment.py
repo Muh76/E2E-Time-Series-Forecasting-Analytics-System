@@ -22,7 +22,7 @@ def add_gaussian_noise(
     Args:
         df: DataFrame with a numeric value column.
         config: Optional augment config. Expected keys (all optional):
-            - value_column: Name of value column (default "value").
+            - value_column: Name of value column (default "target").
             - noise_std: Standard deviation of noise (default 0.0 → no noise).
             - noise_scale: If set, noise_std = noise_scale * std(value); ignored if noise_std set.
             - inplace: If True, modify DataFrame in place (default False).
@@ -33,7 +33,7 @@ def add_gaussian_noise(
         New DataFrame (or same if inplace=True) with value = value + noise.
     """
     cfg = config or {}
-    value_col = cfg.get("value_column", "value")
+    value_col = cfg.get("value_column", "target")
     noise_std = cfg.get("noise_std")
     noise_scale = cfg.get("noise_scale")
     inplace = cfg.get("inplace", False)
@@ -103,8 +103,8 @@ def augment_timeseries(
     """
     Apply deterministic synthetic augmentations to a time series DataFrame.
 
-    Does not modify the original value column: adds value_original (copy of
-    values) and value_augmented (with augmentations applied). Adds
+    Does not modify the original target column: adds target_original (copy of
+    target) and target_augmented (with augmentations applied). Adds
     augmentation_type to mark which rows were modified and how.
 
     Augmentations (each config-driven and reproducible via seed):
@@ -116,11 +116,11 @@ def augment_timeseries(
     Args:
         df: DataFrame with date column and value column; optional entity column.
         config: Optional. Keys (all optional):
-            - value_column: default "value".
+            - value_column: default "target".
             - date_column: default "date".
             - entity_column: if set, augmentations are applied per entity (e.g. store_id).
-            - output_original_column: default "value_original".
-            - output_augmented_column: default "value_augmented".
+            - output_original_column: default "target_original".
+            - output_augmented_column: default "target_augmented".
             - output_type_column: default "augmentation_type".
             - missing_blocks: dict with enabled, n_blocks, block_size_min, block_size_max.
             - noise_regime_shift: dict with enabled, n_shifts, scale_before, scale_after.
@@ -134,10 +134,10 @@ def augment_timeseries(
     """
     cfg = config or {}
     date_col = cfg.get("date_column", "date")
-    value_col = cfg.get("value_column", "value")
+    value_col = cfg.get("value_column", "target")
     entity_col = cfg.get("entity_column")
-    out_orig = cfg.get("output_original_column", "value_original")
-    out_aug = cfg.get("output_augmented_column", "value_augmented")
+    out_orig = cfg.get("output_original_column", "target_original")
+    out_aug = cfg.get("output_augmented_column", "target_augmented")
     out_type = cfg.get("output_type_column", "augmentation_type")
 
     for c in (date_col, value_col):
