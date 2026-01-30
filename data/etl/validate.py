@@ -147,3 +147,113 @@ def validate_data(
         errors=errors,
         warnings=warnings,
     )
+
+
+# ---------------------------------------------------------------------------
+# Retail time series validation (raises on failure)
+# ---------------------------------------------------------------------------
+
+REQUIRED_RETAIL_COLUMNS = ("date", "store_id", "sales")
+
+
+def validate_retail(
+    df: pd.DataFrame,
+    config: dict[str, Any] | None = None,
+) -> None:
+    """
+    Validate retail time series data: schema and data rules.
+
+    Checks:
+    - Required columns exist: date, store_id, sales (or config overrides).
+    - Date column is datetime.
+    - No duplicate (date, store_id) pairs.
+    - Sales values are non-negative.
+    - Time index is strictly monotonic per store (dates increasing per store_id).
+
+    Args:
+        df: DataFrame to validate (e.g. after load_retail_sales_csv).
+        config: Optional. Keys: date_column (default "date"), store_id_column
+            (default "store_id"), sales_column (default "sales").
+
+    Returns:
+        None on success.
+
+    Raises:
+        ValueError: With a single message listing all failed checks (one or more
+            of: missing columns, date not datetime, duplicates, negative sales,
+            non-monotonic dates per store).
+    """
+    cfg = config or {}
+    date_col = cfg.get("date_column", "date")
+    store_col = cfg.get("store_id_column", "store_id")
+    sales_col = cfg.get("sales_column", "sales")
+    required = (date_col, store_col, sales_col)
+
+    errors: list[str] = []
+
+    # 1. Required columns exist
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        errors.append(
+            f"Missing required columns: {missing}. "
+            f"Expected: date, store_id, sales (or config overrides). Found: {list(df.columns)}."
+        )
+    if errors:
+        raise ValueError("\n".join(errors))
+
+    # 2. Date column is datetime
+    if not pd.api.types.is_datetime64_any_dtype(df[date_col]):
+        errors.append(
+            f"Column '{date_col}' must be datetime. "
+            f"Got dtype: {df[date_col].dtype}. Use pd.to_datetime() before validation."
+        )
+    if errors:
+        raise ValueError("\n".join(errors))
+
+    # 3. No duplicate (date, store_id) pairs
+    key = [date_col, store_col]
+    n_rows = len(df)
+    n_unique = df[key].drop_duplicates().shape[0]
+    if n_rows != n_unique:
+        n_dup = n_rows - n_unique
+        dup_example = df[df.duplicated(subset=key, keep=False)].head(2)
+        errors.append(
+            f"Duplicate (date, store_id) pairs: {n_dup} duplicate row(s). "
+            f"Expected unique (date, store_id). Example duplicates:\n{dup_example.to_string()}"
+        )
+    if errors:
+        raise ValueError("\n".join(errors))
+
+    # 4. Sales non-negative
+    if not pd.api.types.is_numeric_dtype(df[sales_col]):
+        errors.append(
+            f"Column '{sales_col}' must be numeric. Got dtype: {df[sales_col].dtype}."
+        )
+    else:
+        neg = (df[sales_col] < 0).sum()
+        if neg > 0:
+            min_sales = df[sales_col].min()
+            errors.append(
+                f"Sales must be non-negative. Found {int(neg)} negative value(s). "
+                f"Min value: {min_sales}. Column: '{sales_col}'."
+            )
+    if errors:
+        raise ValueError("\n".join(errors))
+
+    # 5. Time index strictly monotonic per store (no duplicate dates per store)
+    non_monotonic_stores: list[Any] = []
+    for store_id, group in df.groupby(store_col, sort=False):
+        dates = group[date_col].sort_values()
+        diffs = dates.diff().dropna()
+        if (diffs <= pd.Timedelta(0)).any():
+            non_monotonic_stores.append(store_id)
+    if non_monotonic_stores:
+        sample = non_monotonic_stores[:5]
+        errors.append(
+            f"Time index must be strictly monotonic per store. "
+            f"Stores with non-monotonic or duplicate dates: {sample}"
+            + (f" (and {len(non_monotonic_stores) - 5} more)" if len(non_monotonic_stores) > 5 else "")
+            + f". Total: {len(non_monotonic_stores)} store(s)."
+        )
+    if errors:
+        raise ValueError("\n".join(errors))

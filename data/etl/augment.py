@@ -89,3 +89,139 @@ def augment(
         out = add_gaussian_noise(out, config=noise_cfg, seed=use_seed)
 
     return out
+
+
+# ---------------------------------------------------------------------------
+# Deterministic time series augmentation (missing blocks, noise shift, trend)
+# ---------------------------------------------------------------------------
+
+def augment_timeseries(
+    df: pd.DataFrame,
+    config: dict[str, Any] | None = None,
+    seed: int | None = None,
+) -> pd.DataFrame:
+    """
+    Apply deterministic synthetic augmentations to a time series DataFrame.
+
+    Does not modify the original value column: adds value_original (copy of
+    values) and value_augmented (with augmentations applied). Adds
+    augmentation_type to mark which rows were modified and how.
+
+    Augmentations (each config-driven and reproducible via seed):
+    - Missing data blocks: set contiguous date blocks to NaN in augmented series.
+    - Noise regime shifts: add Gaussian noise with different scale before/after
+      random cut point(s).
+    - Trend change: add a linear trend over random date window(s).
+
+    Args:
+        df: DataFrame with date column and value column; optional entity column.
+        config: Optional. Keys (all optional):
+            - value_column: default "value".
+            - date_column: default "date".
+            - entity_column: if set, augmentations are applied per entity (e.g. store_id).
+            - output_original_column: default "value_original".
+            - output_augmented_column: default "value_augmented".
+            - output_type_column: default "augmentation_type".
+            - missing_blocks: dict with enabled, n_blocks, block_size_min, block_size_max.
+            - noise_regime_shift: dict with enabled, n_shifts, scale_before, scale_after.
+            - trend_change: dict with enabled, n_windows, window_length_min, window_length_max,
+              slope_min, slope_max.
+        seed: Random seed for reproducibility. Required for deterministic behavior.
+
+    Returns:
+        New DataFrame with original column preserved, augmented value column,
+        and augmentation_type column. Sorted by date (and entity if present).
+    """
+    cfg = config or {}
+    date_col = cfg.get("date_column", "date")
+    value_col = cfg.get("value_column", "value")
+    entity_col = cfg.get("entity_column")
+    out_orig = cfg.get("output_original_column", "value_original")
+    out_aug = cfg.get("output_augmented_column", "value_augmented")
+    out_type = cfg.get("output_type_column", "augmentation_type")
+
+    for c in (date_col, value_col):
+        if c not in df.columns:
+            raise ValueError(f"augment_timeseries requires column '{c}'. Found: {list(df.columns)}.")
+
+    out = df.copy()
+    out[date_col] = pd.to_datetime(out[date_col]).dt.normalize()
+    out = out.sort_values([c for c in [date_col, entity_col] if c in out.columns]).reset_index(drop=True)
+    out[out_orig] = out[value_col].astype(float)
+    out[out_aug] = out[value_col].astype(float).copy()
+    out[out_type] = "original"
+
+    rng = np.random.default_rng(seed)
+
+    if entity_col and entity_col in out.columns:
+        groups = list(out.groupby(entity_col, sort=False))
+    else:
+        groups = [(None, out)]
+
+    for entity_id, grp in groups:
+        if entity_id is not None:
+            mask = out[entity_col] == entity_id
+            idx = out.index[mask]
+        else:
+            idx = out.index
+        n = len(idx)
+        if n == 0:
+            continue
+
+        # 1. Missing data blocks
+        mb = (cfg.get("missing_blocks") or {}).get("enabled", False)
+        if mb and n > 0:
+            n_blocks = (cfg.get("missing_blocks") or {}).get("n_blocks", 1)
+            bs_min = (cfg.get("missing_blocks") or {}).get("block_size_min", 1)
+            bs_max = (cfg.get("missing_blocks") or {}).get("block_size_max", 3)
+            n_blocks = min(n_blocks, max(1, n // max(1, bs_min)))
+            for _ in range(n_blocks):
+                block_size = int(rng.integers(bs_min, bs_max + 1))
+                start = int(rng.integers(0, max(1, n - block_size + 1)))
+                for i in range(start, min(start + block_size, n)):
+                    pos = idx[i]
+                    out.loc[pos, out_aug] = np.nan
+                    prev = out.loc[pos, out_type]
+                    out.loc[pos, out_type] = "missing_block" if prev == "original" else f"{prev},missing_block"
+
+        # 2. Noise regime shifts (segments between cut points get alternating scale)
+        ns = (cfg.get("noise_regime_shift") or {}).get("enabled", False)
+        if ns and n > 0:
+            n_shifts = (cfg.get("noise_regime_shift") or {}).get("n_shifts", 1)
+            scale_before = (cfg.get("noise_regime_shift") or {}).get("scale_before", 0.0)
+            scale_after = (cfg.get("noise_regime_shift") or {}).get("scale_after", 1.0)
+            cuts = sorted(set([0, n] + rng.integers(1, n, size=min(n_shifts, n - 1)).tolist()))
+            for seg_idx in range(len(cuts) - 1):
+                lo, hi = cuts[seg_idx], cuts[seg_idx + 1]
+                scale = scale_before if seg_idx % 2 == 0 else scale_after
+                noise = rng.normal(0, scale, size=hi - lo)
+                out.loc[idx[lo:hi], out_aug] = out.loc[idx[lo:hi], out_aug].values + noise
+                for i in range(lo, hi):
+                    pos = idx[i]
+                    prev = out.loc[pos, out_type]
+                    out.loc[pos, out_type] = "noise_shift" if prev == "original" else f"{prev},noise_shift"
+
+        # 3. Trend change over window
+        tc = (cfg.get("trend_change") or {}).get("enabled", False)
+        if tc and n > 0:
+            n_windows = (cfg.get("trend_change") or {}).get("n_windows", 1)
+            w_min = (cfg.get("trend_change") or {}).get("window_length_min", 5)
+            w_max = (cfg.get("trend_change") or {}).get("window_length_max", 14)
+            slope_min = (cfg.get("trend_change") or {}).get("slope_min", -1.0)
+            slope_max = (cfg.get("trend_change") or {}).get("slope_max", 1.0)
+            for _ in range(n_windows):
+                wlen = int(rng.integers(w_min, w_max + 1))
+                wlen = min(wlen, n)
+                start = int(rng.integers(0, max(1, n - wlen + 1)))
+                slope = float(rng.uniform(slope_min, slope_max))
+                dates = out.loc[idx, date_col].iloc[start : start + wlen]
+                t0 = dates.iloc[0]
+                for j in range(wlen):
+                    i = start + j
+                    pos = idx[i]
+                    dt = (dates.iloc[j] - t0).days
+                    out.loc[pos, out_aug] = out.loc[pos, out_aug] + slope * dt
+                    prev = out.loc[pos, out_type]
+                    out.loc[pos, out_type] = "trend" if prev == "original" else f"{prev},trend"
+
+    return out
