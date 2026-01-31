@@ -6,6 +6,7 @@ matrix. Supports multi-entity. fit() uses time-aware split; predict() supports
 recursive multi-step. Deterministic (fixed seed).
 """
 
+import logging
 from typing import Any
 
 import numpy as np
@@ -13,6 +14,7 @@ import pandas as pd
 
 from .base import BaseForecastingModel
 
+logger = logging.getLogger(__name__)
 MODEL_NAME = "lightgbm"
 
 
@@ -192,7 +194,33 @@ class LightGBMForecast(BaseForecastingModel):
         freq: pd.DateOffset,
         config: dict[str, Any],
     ) -> list[dict[str, Any]]:
-        """Predict for one series. Recursive if horizon > 1 and feature_engineering in config."""
+        """
+        Predict for one series using recursive multi-step forecasting.
+
+        **Recursive multi-step strategy:**
+        Future target values are unknown at prediction time, so they are replaced
+        by the model's own predictions. For step h=1 we use the last observed row's
+        features and predict y_1. For step h+1 we need features at the next date;
+        those features (e.g. lags, rolling stats) depend on the target at the
+        previous step. We therefore append the predicted value from step h to the
+        series, re-run the feature pipeline to compute features for the new row,
+        then predict step h+1 from that row. So features for step h+1 are computed
+        using the predicted value from step h (and earlier predictions), not true
+        future targets.
+
+        **Error accumulation:** Because each step conditions on prior predictions
+        rather than true values, errors can accumulate over longer horizons:
+        early over- or under-predictions affect lags and rolling features for
+        later steps, which can amplify bias or variance further out.
+
+        **Why this strategy is acceptable:** Recursive (autoregressive) multi-step
+        forecasting is standard in production: it requires only one trained model,
+        avoids training separate models per horizon, and matches the setting where
+        future targets are never available at inference time. Alternatives (e.g.
+        direct multi-step or true multi-output models) have different trade-offs;
+        recursive remains the default for many time-series and ML forecasting
+        systems.
+        """
         group = group.sort_values(self._date_col).reset_index(drop=True)
         last_date = group[self._date_col].iloc[-1]
         fe_config = config.get("feature_engineering")
@@ -214,9 +242,13 @@ class LightGBMForecast(BaseForecastingModel):
 
         for h in range(1, horizon + 1):
             # Last row's features (may have been updated by pipeline in previous step)
-            X = current[self._feature_cols].iloc[[-1]]
+            raw_last = current[self._feature_cols].iloc[[-1]]
+            if raw_last.isna().any(axis=1).any():
+                logger.warning(
+                    "NaNs encountered at inference time in features; applying forward-fill (last observation carried forward), then zero fallback for any remaining."
+                )
+            X = current[self._feature_cols].ffill().iloc[[-1]]
             if X.isna().any(axis=1).any():
-                # Fill NaN with 0 for inference (or use last valid); simple fallback
                 X = X.fillna(0)
             y_pred = float(self._model.predict(X)[0])
             forecast_date = last_date + freq * h
