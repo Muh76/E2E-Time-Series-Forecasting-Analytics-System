@@ -36,7 +36,20 @@ def _time_aware_split(
     date_col: str,
     val_frac: float,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Split by time: train = rows before cutoff date, val = rows at or after cutoff."""
+    """
+    Split by time: train = rows before cutoff date, val = rows at or after cutoff.
+
+    Validation uses a time-based holdout: the last fraction of unique dates
+    (e.g. last 20%) form the validation set; all earlier dates form the train set.
+    This is a simplified approximation of forecasting validation: it avoids
+    lookahead and respects temporal order, but uses a single train/val split.
+    In more advanced setups, rolling-origin or backtesting (repeated refit and
+    evaluate over multiple cutoffs) would be used to better approximate
+    out-of-sample performance across time. For the current project scope, a
+    single time-based holdout is acceptable: it is simple, reproducible, and
+    sufficient to compare models and guard against overfitting without the
+    complexity of full backtesting.
+    """
     dates = df[date_col].drop_duplicates().sort_values()
     n = len(dates)
     if n < 2 or val_frac <= 0 or val_frac >= 1:
@@ -73,6 +86,13 @@ class LightGBMForecast(BaseForecastingModel):
     def fit(self, train_df: pd.DataFrame, config: dict[str, Any] | None = None) -> "LightGBMForecast":
         """
         Train on time-aware split. Excludes target from X. Does not mutate train_df; no file I/O.
+
+        Validation uses a time-based holdout (last fraction of dates via
+        time_split_val_frac). This is a simplified approximation of forecasting
+        validation; rolling-origin or backtesting would be used in more advanced
+        setups. For the current project scope this approach is acceptable:
+        simple, reproducible, and sufficient to compare models and guard
+        against overfitting.
         """
         import lightgbm as lgb
 
@@ -98,6 +118,10 @@ class LightGBMForecast(BaseForecastingModel):
         self._cat_cols = [c for c in self._feature_cols if c == self._entity_col or train_df[c].dtype == "object" or train_df[c].dtype.name == "category"]
 
         train_sub, val_sub = _time_aware_split(train_df, self._date_col, val_frac)
+        logger.info(
+            "Time-aware split: train_rows=%d, val_rows=%d, val_frac=%.2f",
+            len(train_sub), len(val_sub), val_frac,
+        )
         # Drop rows with NaN in features or target (e.g. warm-up from lags/rolling)
         X_train = train_sub[self._feature_cols].copy()
         y_train = train_sub[self._target_col]
