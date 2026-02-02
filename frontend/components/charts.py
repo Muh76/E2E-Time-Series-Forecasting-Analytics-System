@@ -75,6 +75,90 @@ def render_forecast_vs_actual_plotly(
     st.plotly_chart(fig, use_container_width=True)
 
 
+def render_rolling_metric_chart(
+    dates: list[str],
+    values: list[float],
+    threshold: float | None,
+    metric_name: str,
+    title: str = "",
+    threshold_label: str = "Alert threshold",
+) -> None:
+    """
+    Render rolling metric line chart with optional threshold annotation.
+
+    Args:
+        dates: Date strings for x-axis.
+        values: Metric values.
+        threshold: Optional threshold line value.
+        metric_name: Label for y-axis (e.g. MAE, MAPE).
+        title: Chart title.
+        threshold_label: Legend label for threshold.
+    """
+    if not dates or not values:
+        st.info(f"No {metric_name} data available.")
+        return
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(x=dates, y=values, mode="lines+markers", name=metric_name, line=dict(color="#3b82f6"))
+    )
+    if threshold is not None:
+        fig.add_hline(
+            y=threshold,
+            line_dash="dash",
+            line_color="#ef4444",
+            annotation_text=threshold_label,
+            annotation_position="right",
+        )
+    fig.update_layout(
+        title=title or f"Rolling {metric_name}",
+        xaxis_title="Date",
+        yaxis_title=metric_name,
+        hovermode="x unified",
+        showlegend=True,
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def render_drift_bar_chart(
+    features: list[str],
+    scores: list[float],
+    threshold: float | None = None,
+    title: str = "Drift score per feature",
+) -> None:
+    """
+    Render drift score bar chart with optional threshold annotation.
+
+    Args:
+        features: Feature names.
+        scores: Drift scores per feature.
+        threshold: Optional threshold line.
+        title: Chart title.
+    """
+    if not features or not scores:
+        st.info("No drift data available.")
+        return
+    colors = ["#ef4444" if (threshold and s >= threshold) else "#3b82f6" for s in scores]
+    fig = go.Figure()
+    fig.add_trace(
+        go.Bar(x=features, y=scores, marker_color=colors, name="Drift score")
+    )
+    if threshold is not None:
+        fig.add_hline(
+            y=threshold,
+            line_dash="dash",
+            line_color="#f59e0b",
+            annotation_text="Threshold",
+            annotation_position="right",
+        )
+    fig.update_layout(
+        title=title,
+        xaxis_title="Feature",
+        yaxis_title="Drift score",
+        showlegend=False,
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+
 def render_forecast_chart(actual=None, predicted=None, x_col: str = "date", title: str = "Forecast vs Actual"):
     """
     Render actual vs predicted time series overlay (legacy; uses Plotly when possible).
