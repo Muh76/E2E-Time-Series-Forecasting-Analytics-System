@@ -1,1 +1,5 @@
-# Performance monitoring
+# Performance monitoring.
+
+from .performance_monitor import PerformanceMonitor
+
+__all__ = ["PerformanceMonitor"]
