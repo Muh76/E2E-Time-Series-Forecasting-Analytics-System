@@ -14,7 +14,7 @@ from typing import Any
 import requests
 import yaml
 
-# Project root = frontend/components/ -> frontend/ -> project root
+# frontend/components/api.py -> parent.parent = frontend, parent.parent.parent = project root
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 _DEFAULT_TIMEOUT = 10
@@ -78,18 +78,7 @@ def get_forecasts(
 ) -> dict[str, Any]:
     """
     Request forecasts from the backend.
-
     POST /api/v1/forecasts/generate. Returns mock data if backend is unavailable.
-
-    Args:
-        series_ids: List of series identifiers. Default: ["series_001"].
-        horizon_steps: Number of steps to forecast.
-        frequency: Series frequency (D, H, W).
-        model_version: Model version; None uses backend default.
-        return_interval: Whether to request prediction intervals.
-
-    Returns:
-        Dict with job_id, status, forecasts, generated_at.
     """
     series_ids = series_ids or ["series_001"]
     payload: dict[str, Any] = {
@@ -118,7 +107,6 @@ def _mock_forecasts(
     horizon_steps: int,
     frequency: str,
 ) -> dict[str, Any]:
-    """Return mock forecast data when backend is unavailable."""
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     forecasts = []
     for sid in series_ids:
@@ -142,18 +130,7 @@ def get_monitoring_summary(
     model_version: str | None = None,
     since: str | None = None,
 ) -> dict[str, Any]:
-    """
-    Fetch monitoring summary from the backend.
-
-    GET /api/v1/monitoring/summary. Returns mock data if backend is unavailable.
-
-    Args:
-        model_version: Optional filter by model version.
-        since: Optional ISO 8601 datetime; only metrics after this time.
-
-    Returns:
-        Dict with model_version, as_of, performance, drift, pipeline.
-    """
+    """Fetch monitoring summary. Returns mock data if backend is unavailable."""
     params: dict[str, str] = {}
     if model_version:
         params["model_version"] = model_version
@@ -173,27 +150,14 @@ def get_monitoring_summary(
 
 
 def _mock_monitoring_summary() -> dict[str, Any]:
-    """Return mock monitoring summary when backend is unavailable."""
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     return {
+        "model_name": "LightGBM",
         "model_version": "v1.0.0",
         "as_of": now,
-        "performance": {
-            "mae": 2.34,
-            "rmse": 3.01,
-            "mape": 0.042,
-            "sample_size": 0,
-        },
-        "drift": {
-            "status": "ok",
-            "last_checked": now,
-            "indicators": [],
-        },
-        "pipeline": {
-            "last_training": now,
-            "last_etl": now,
-            "status": "ok",
-        },
+        "performance": {"mae": 2.34, "rmse": 3.01, "mape": 0.042, "sample_size": 0},
+        "drift": {"status": "ok", "last_checked": now, "indicators": []},
+        "pipeline": {"last_training": now, "last_etl": now, "status": "ok"},
     }
 
 
@@ -205,19 +169,8 @@ def get_metrics(
     model_version: str | None = None,
 ) -> dict[str, Any]:
     """
-    Fetch historical metrics from the backend.
-
-    GET /api/v1/metrics/historical. Returns mock data if backend is unavailable.
-
-    Args:
-        series_ids: List of series identifiers. Default: ["series_001"].
-        start_date: Start of range (ISO 8601). Default: 7 days ago.
-        end_date: End of range (ISO 8601). Default: today.
-        metrics: Comma-separated or list: actual, forecast, error. Default: all.
-        model_version: Optional filter by model version.
-
-    Returns:
-        Dict with data (list of {series_id, date, actual, forecast, error}) and meta.
+    Fetch historical metrics. GET /api/v1/metrics/historical.
+    Returns mock data if backend is unavailable.
     """
     series_ids = series_ids or ["series_001"]
     today = datetime.now(timezone.utc).date()
@@ -253,7 +206,6 @@ def _mock_metrics(
     start_date: str,
     end_date: str,
 ) -> dict[str, Any]:
-    """Return mock historical metrics when backend is unavailable."""
     start = datetime.fromisoformat(start_date).date()
     end = datetime.fromisoformat(end_date).date()
     delta = (end - start).days + 1
@@ -274,10 +226,5 @@ def _mock_metrics(
             })
     return {
         "data": data,
-        "meta": {
-            "series_ids": series_ids,
-            "start_date": start_date,
-            "end_date": end_date,
-            "count": len(data),
-        },
+        "meta": {"series_ids": series_ids, "start_date": start_date, "end_date": end_date, "count": len(data)},
     }

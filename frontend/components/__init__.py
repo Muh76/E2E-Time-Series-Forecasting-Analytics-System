@@ -7,7 +7,11 @@ from components.api import (
     get_metrics,
     get_monitoring_summary,
 )
-from components.charts import render_forecast_chart, render_time_series_chart
+from components.charts import (
+    render_forecast_chart,
+    render_forecast_vs_actual_plotly,
+    render_time_series_chart,
+)
 from components.metrics import render_metrics_cards, render_metric_single
 
 __all__ = [
@@ -17,6 +21,7 @@ __all__ = [
     "get_metrics",
     "get_monitoring_summary",
     "render_forecast_chart",
+    "render_forecast_vs_actual_plotly",
     "render_time_series_chart",
     "render_metrics_cards",
     "render_metric_single",
