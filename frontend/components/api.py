@@ -58,13 +58,15 @@ def api_url(path: str) -> str:
     return f"{base}{path}"
 
 
-def _is_backend_unavailable(exc: BaseException) -> bool:
+def _is_backend_unavailable(exc: BaseException, include_404: bool = False) -> bool:
     """Return True if the exception indicates backend is unreachable."""
     if isinstance(exc, (requests.ConnectionError, requests.Timeout)):
         return True
     if isinstance(exc, requests.RequestException):
         resp = getattr(exc, "response", None)
         if resp is not None and resp.status_code >= 500:
+            return True
+        if include_404 and resp is not None and resp.status_code == 404:
             return True
     return False
 
@@ -151,14 +153,125 @@ def get_monitoring_summary(
 
 def _mock_monitoring_summary() -> dict[str, Any]:
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    today = datetime.now(timezone.utc).date()
+    # Rolling series for charts (last 7 days)
+    rolling_mae = [
+        {"date": (today - timedelta(days=i)).isoformat(), "value": 2.1 + (i % 3) * 0.3}
+        for i in range(6, -1, -1)
+    ]
+    rolling_mape = [
+        {"date": (today - timedelta(days=i)).isoformat(), "value": 3.5 + (i % 3) * 0.5}
+        for i in range(6, -1, -1)
+    ]
+    per_feature = {"lag_1": 0.12, "lag_7": 0.18, "rolling_7": 0.22, "day_of_week": 0.08}
     return {
         "model_name": "LightGBM",
         "model_version": "v1.0.0",
         "as_of": now,
-        "performance": {"mae": 2.34, "rmse": 3.01, "mape": 0.042, "sample_size": 0},
-        "drift": {"status": "ok", "last_checked": now, "indicators": []},
+        "performance": {"mae": 2.34, "rmse": 3.01, "mape": 0.042, "sample_size": 120},
+        "drift": {
+            "status": "ok",
+            "last_checked": now,
+            "indicators": [],
+            "per_feature_scores": per_feature,
+            "threshold": 0.25,
+        },
         "pipeline": {"last_training": now, "last_etl": now, "status": "ok"},
+        "rolling_series": {"mae": rolling_mae, "mape": rolling_mape},
+        "thresholds": {"mae_alert": 15.0, "mape_alert": 0.20, "drift_threshold": 0.25},
+        "alerts": {"mae": False, "mape": False, "drift": False},
     }
+
+
+def copilot_explain(
+    query: str,
+    context: dict[str, Any] | None = None,
+    options: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """
+    Request explanation from copilot. POST /api/v1/copilot/explain.
+    Pass monitoring_summary and metrics in context for grounding.
+    Returns mock when backend unavailable or endpoint missing (404).
+    """
+    payload: dict[str, Any] = {"query": query or "What is the current model health?"}
+    if context:
+        payload["context"] = context
+    if options:
+        payload["options"] = options
+
+    url = api_url("/api/v1/copilot/explain")
+    try:
+        resp = requests.post(url, json=payload, timeout=30)
+        resp.raise_for_status()
+        return resp.json()
+    except requests.RequestException as e:
+        if _is_backend_unavailable(e, include_404=True):
+            logger.warning("Copilot unavailable, returning mock explanation: %s", e)
+            return _mock_copilot_explain(query, context)
+        raise
+
+
+def _mock_copilot_explain(query: str, context: dict[str, Any] | None) -> dict[str, Any]:
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    perf = (context or {}).get("monitoring_summary", {}).get("performance", {}) or {}
+    mae = perf.get("mae", 0)
+    mape = perf.get("mape", 0)
+    mape_pct = mape * 100 if mape and mape < 1 else (mape or 0)
+    return {
+        "explanation": (
+            f"You asked: \"{query}\"\n\n"
+            "**Mock response** (Copilot endpoint not available): "
+            f"Current performance: MAE={mae:.2f}, MAPE={mape_pct:.1f}%. "
+            "The copilot explains forecasts and metrics using precomputed data; it does not perform prediction. "
+            "Connect the backend with LLM to get real explanations."
+        ),
+        "sources": [{"type": "mock", "note": "Backend copilot unavailable"}],
+        "generated_at": now,
+    }
+
+
+def get_monitoring_series(
+    metric: str,
+    start_date: str,
+    end_date: str,
+    model_version: str | None = None,
+    granularity: str = "daily",
+) -> dict[str, Any]:
+    """
+    Fetch monitoring time series (rolling MAE, MAPE, etc).
+    GET /api/v1/monitoring/series. Returns mock data if backend unavailable.
+    """
+    params: dict[str, str] = {
+        "metric": metric,
+        "start_date": start_date,
+        "end_date": end_date,
+        "granularity": granularity,
+    }
+    if model_version:
+        params["model_version"] = model_version
+
+    url = api_url("/api/v1/monitoring/series")
+    try:
+        resp = requests.get(url, params=params, timeout=_DEFAULT_TIMEOUT)
+        resp.raise_for_status()
+        return resp.json()
+    except requests.RequestException as e:
+        if _is_backend_unavailable(e):
+            logger.warning("Backend unavailable, returning mock monitoring series: %s", e)
+            return _mock_monitoring_series(metric, start_date, end_date)
+        raise
+
+
+def _mock_monitoring_series(metric: str, start_date: str, end_date: str) -> dict[str, Any]:
+    start = datetime.fromisoformat(start_date).date()
+    end = datetime.fromisoformat(end_date).date()
+    delta = (end - start).days + 1
+    base = 2.3 if metric == "mae" else 0.04
+    data = [
+        {"date": (start + timedelta(days=i)).isoformat(), "value": base + (i % 5) * 0.1}
+        for i in range(min(delta, 14))
+    ]
+    return {"metric": metric, "model_version": "v1.0.0", "granularity": "daily", "data": data}
 
 
 def get_metrics(
