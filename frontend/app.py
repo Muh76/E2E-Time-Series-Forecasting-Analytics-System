@@ -18,7 +18,7 @@ if str(FRONTEND_DIR) not in sys.path:
 import streamlit as st
 import yaml
 
-from components.api import get_api_base_url
+from components.api import check_api_health, get_api_base_url
 
 
 def load_page_config():
@@ -64,6 +64,12 @@ def render_sidebar():
 
     api_base = get_api_base_url()
     st.sidebar.caption(f"API: `{api_base}`")
+
+    if check_api_health():
+        st.sidebar.success("API reachable")
+    else:
+        st.sidebar.warning("API unreachable — using mock data")
+
     st.sidebar.markdown("---")
 
     # Streamlit auto-adds page links when using pages/ folder;
@@ -74,19 +80,16 @@ def render_sidebar():
 
 
 def main():
-    """Main entry: set config, sidebar, and render Overview content."""
+    """Main entry: set config, sidebar, and navigation hint."""
     load_page_config()
     render_sidebar()
 
-    st.title("Overview")
-    st.markdown("Welcome to the **Time Series Forecasting & Analytics** dashboard.")
-
-    api_base = get_api_base_url()
-    st.markdown(f"Backend API: `{api_base}`")
-
-    st.markdown("---")
     st.markdown(
-        "Navigate using the sidebar to access **Forecast**, **Monitoring**, and **Copilot**."
+        "Use the sidebar to navigate the application:\n\n"
+        "- **Overview** – system health\n"
+        "- **Forecast** – actual vs predicted\n"
+        "- **Monitoring** – performance & drift\n"
+        "- **Copilot** – natural language explanations"
     )
 
 
