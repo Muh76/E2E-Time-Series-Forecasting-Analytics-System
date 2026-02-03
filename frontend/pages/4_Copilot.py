@@ -16,27 +16,27 @@ from components.api import copilot_explain, get_api_base_url, get_metrics, get_m
 
 def main() -> None:
     st.title("Copilot")
-    st.markdown("AI-assisted explanations for forecasts and model behavior.")
+    st.markdown("Natural language explanations for forecasts and model metrics.")
 
-    st.info("**Note:** Copilot explains forecasts and metrics using precomputed data — it does not predict.")
+    st.info("Copilot explains forecasts and metrics using precomputed data. It does not perform prediction.")
 
     api_base = get_api_base_url()
     st.caption(f"API: `{api_base}`")
 
     st.markdown("---")
-    st.subheader("Ask a question")
+    st.subheader("Query")
 
     query = st.text_input(
-        "Your question",
+        "Enter your question",
         placeholder="e.g. Why did the forecast increase? What does the current MAE indicate?",
         key="copilot_query",
     )
 
     if st.button("Submit", type="primary", key="copilot_submit"):
         if not query or not query.strip():
-            st.warning("Please enter a question.")
+            st.warning("Enter a question to continue.")
         else:
-            with st.spinner("Getting explanation..."):
+            with st.spinner("Retrieving explanation..."):
                 monitoring_summary = get_monitoring_summary()
                 metrics = get_metrics()
 

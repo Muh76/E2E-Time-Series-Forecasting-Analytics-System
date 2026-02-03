@@ -22,7 +22,7 @@ def render_time_series_chart(data=None, x_col: str = "date", y_col: str = "value
         title: Chart title.
     """
     if data is None or data.empty:
-        st.info("No data available for chart.")
+        st.info("No data available.")
         return
     if title:
         st.subheader(title)

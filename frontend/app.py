@@ -59,7 +59,7 @@ def _load_config() -> dict:
 
 def render_sidebar():
     """Render sidebar with app info and API status."""
-    st.sidebar.title("📈 Forecasting Analytics")
+    st.sidebar.title("Time Series Forecasting")
     st.sidebar.markdown("---")
 
     api_base = get_api_base_url()
@@ -68,14 +68,14 @@ def render_sidebar():
     if check_api_health():
         st.sidebar.success("API reachable")
     else:
-        st.sidebar.warning("API unreachable — using mock data")
+        st.sidebar.warning("API unreachable — mock data in use")
 
     st.sidebar.markdown("---")
 
     # Streamlit auto-adds page links when using pages/ folder;
     # this section provides additional context
     st.sidebar.info(
-        "Use the pages above to explore Overview, Forecast, Monitoring, and Copilot."
+        "Select a page from the list above to navigate."
     )
 
 
@@ -85,10 +85,11 @@ def main():
     render_sidebar()
 
     st.markdown(
-        "Use the sidebar to navigate the application:\n\n"
-        "- **Overview** – system health\n"
-        "- **Forecast** – actual vs predicted\n"
-        "- **Monitoring** – performance & drift\n"
+        "**System Overview**\n\n"
+        "Use the sidebar to navigate:\n\n"
+        "- **Overview** – system health and status\n"
+        "- **Forecast** – actual vs predicted values\n"
+        "- **Monitoring** – performance metrics and drift detection\n"
         "- **Copilot** – natural language explanations"
     )
 
