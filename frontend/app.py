@@ -22,7 +22,7 @@ import streamlit as st
 import yaml
 
 from components.api import check_api_health, get_api_base_url
-from components.ui import render_empty_state, render_warning
+from components.ui import render_empty, render_warning
 
 
 def load_page_config():
@@ -78,7 +78,7 @@ def render_sidebar():
 
     # Streamlit auto-adds page links when using pages/ folder;
     # this section provides additional context
-    render_empty_state("Select a page from the list above to navigate.", sidebar=True)
+    render_empty("Select a page from the list above to navigate.", sidebar=True)
 
 
 def main():
