@@ -16,7 +16,7 @@ def render_metrics_cards(metrics: dict, columns=None):
         columns: Optional list of column objects from st.columns(); creates default if None.
     """
     if not metrics:
-        st.info("No metrics to display.")
+        st.info("No metrics available.")
         return
     cols = columns or st.columns(len(metrics))
     for i, (name, value) in enumerate(metrics.items()):

@@ -46,9 +46,18 @@ def _load_config() -> dict:
 
 
 def get_api_base_url() -> str:
-    """Return backend API base URL from config (e.g. http://localhost:8000)."""
+    """
+    Return backend API base URL. Single source of truth.
+    Priority: 1) config frontend.api_base_url, 2) env API_BASE_URL, 3) fallback http://localhost:8000.
+    """
     config = _load_config()
-    return config.get("frontend", {}).get("api_base_url", "http://localhost:8000")
+    url = config.get("frontend", {}).get("api_base_url")
+    if url:
+        return url
+    url = os.environ.get("API_BASE_URL")
+    if url:
+        return url
+    return "http://localhost:8000"
 
 
 def api_url(path: str) -> str:

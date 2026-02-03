@@ -29,7 +29,7 @@ def _compute_mae_rmse(actual: list[float], forecast: list[float]) -> tuple[float
 
 def main() -> None:
     st.title("Forecast")
-    st.markdown("Generate and explore forecasts for your time series.")
+    st.markdown("Time series forecasts and evaluation metrics.")
 
     api_base = get_api_base_url()
     st.caption(f"API: `{api_base}`")
@@ -50,7 +50,7 @@ def main() -> None:
     st.markdown("---")
     st.subheader("Entity")
     selected_entity = st.selectbox(
-        "Select entity (series)",
+        "Entity",
         options=series_ids,
         index=0,
         key="forecast_entity",
@@ -112,6 +112,7 @@ def main() -> None:
 
     st.markdown("---")
     st.subheader("Metrics")
+    st.caption("MAE and RMSE computed over the selected entity's historical forecast period.")
     col1, col2 = st.columns(2)
     with col1:
         st.metric(label="MAE", value=f"{mae:.4f}" if not math.isnan(mae) else "—")

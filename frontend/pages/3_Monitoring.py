@@ -41,7 +41,7 @@ def _load_thresholds() -> dict:
 
 def main() -> None:
     st.title("Monitoring")
-    st.markdown("View performance metrics, drift detection, and model health.")
+    st.markdown("Performance metrics, drift detection, and model health.")
 
     api_base = get_api_base_url()
     st.caption(f"API: `{api_base}`")
@@ -75,29 +75,31 @@ def main() -> None:
     # Alert flags with icons
     st.markdown("---")
     st.subheader("Alerts")
+    st.caption("Threshold-based alerts for MAE, MAPE, and data drift.")
     col1, col2, col3 = st.columns(3)
     with col1:
         if alerts.get("mae"):
-            st.error("⚠️ MAE above threshold")
+            st.error("MAE above threshold")
         else:
-            st.success("✅ MAE within range")
+            st.success("MAE within range")
         st.caption(f"Threshold: {mae_alert}")
     with col2:
         if alerts.get("mape"):
-            st.error("⚠️ MAPE above threshold")
+            st.error("MAPE above threshold")
         else:
-            st.success("✅ MAPE within range")
+            st.success("MAPE within range")
         st.caption(f"Threshold: {mape_alert}%")
     with col3:
         if alerts.get("drift"):
-            st.error("⚠️ Drift detected")
+            st.error("Drift detected")
         else:
-            st.success("✅ No drift")
+            st.success("No drift")
         st.caption(f"Threshold: {drift_threshold}")
 
     # Rolling MAE and MAPE line charts
     st.markdown("---")
     st.subheader("Rolling metrics")
+    st.caption("Metrics reflect the most recent evaluation window.")
     rolling = summary.get("rolling_series") or {}
     rolling_mae = rolling.get("mae") or []
     rolling_mape = rolling.get("mape") or []
@@ -122,7 +124,7 @@ def main() -> None:
                 threshold_label=f"Alert ({mae_alert})",
             )
         else:
-            st.info("No rolling MAE data.")
+            st.info("No rolling MAE data available.")
     with col2:
         if rolling_mape:
             dates = [r["date"] for r in rolling_mape]
@@ -136,7 +138,7 @@ def main() -> None:
                 threshold_label=f"Alert ({mape_alert}%)",
             )
         else:
-            st.info("No rolling MAPE data.")
+            st.info("No rolling MAPE data available.")
 
     # Drift per feature bar chart
     st.markdown("---")
@@ -155,7 +157,7 @@ def main() -> None:
             title="Drift score per feature",
         )
     else:
-        st.info("No drift data by feature.")
+        st.info("No drift data available for features.")
 
 
 if __name__ == "__main__":
