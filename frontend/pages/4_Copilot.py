@@ -3,13 +3,6 @@ Insight Copilot — AI-assisted explanations from monitoring and drift results.
 No forecasting logic; no raw data sent to LLM. Uses mock when API unavailable.
 """
 
-import sys
-from pathlib import Path
-
-FRONTEND_DIR = Path(__file__).resolve().parent.parent
-if str(FRONTEND_DIR) not in sys.path:
-    sys.path.insert(0, str(FRONTEND_DIR))
-
 import streamlit as st
 
 from components.api import copilot_explain, get_monitoring_summary

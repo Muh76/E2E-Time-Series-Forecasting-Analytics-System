@@ -2,13 +2,6 @@
 Forecast vs Actual — compare actual historical values with forecasts.
 """
 
-import sys
-from pathlib import Path
-
-FRONTEND_DIR = Path(__file__).resolve().parent.parent
-if str(FRONTEND_DIR) not in sys.path:
-    sys.path.insert(0, str(FRONTEND_DIR))
-
 import streamlit as st
 
 from components.api import get_forecast_vs_actual

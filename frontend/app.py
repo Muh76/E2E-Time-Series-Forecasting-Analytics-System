@@ -5,15 +5,18 @@ Sets page config, loads backend API base URL from config, and routes to pages.
 Streamlit's native pages/ folder provides automatic sidebar navigation.
 """
 
-import os
 import sys
 from pathlib import Path
 
-# Frontend dir = parent of app.py; project root = parent of frontend
-FRONTEND_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = FRONTEND_DIR.parent
-if str(FRONTEND_DIR) not in sys.path:
-    sys.path.insert(0, str(FRONTEND_DIR))
+# Ensure project root is on path so "import frontend" works when running frontend/app.py
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+import frontend  # noqa: F401 — runs frontend/__init__.py, which adds frontend dir for components.*
+
+import os
+from pathlib import Path
 
 import streamlit as st
 import yaml
@@ -35,7 +38,7 @@ def load_page_config():
 
 def _load_config() -> dict:
     """Load base config and merge with env-specific overrides."""
-    root = Path(__file__).resolve().parent.parent
+    root = Path(__file__).resolve().parent.parent  # project root (parent of frontend)
     config_dir = root / "config"
     base_path = config_dir / "base" / "default.yaml"
     if not base_path.exists():
