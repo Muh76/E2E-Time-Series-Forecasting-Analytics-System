@@ -49,6 +49,21 @@ def main() -> None:
         st.markdown(f"**Drift** {icon}")
         st.caption(f"Threshold: {drift_threshold}")
 
+    any_alert = mae_alerted or mape_alerted or drift_alerted
+    if any_alert:
+        active_alerts = []
+        if mae_alerted:
+            active_alerts.append("MAE")
+        if mape_alerted:
+            active_alerts.append("MAPE")
+        if drift_alerted:
+            active_alerts.append("Drift")
+        alert_label = ", ".join(active_alerts)
+        if st.button("Explain this alert", key="explain_alert_btn"):
+            st.session_state["copilot_alert_type"] = alert_label
+            st.session_state["copilot_alert_context"] = summary
+            st.switch_page("pages/4_Copilot.py")
+
     # --- Section 1: Performance Monitoring ---
     st.markdown("---")
     st.subheader("1. Performance Monitoring")
