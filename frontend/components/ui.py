@@ -6,6 +6,22 @@ Consistent styling: neutral, professional tone; no emojis in titles.
 
 import streamlit as st
 
+# Default messages for loading states (no duplicated strings across pages)
+LOADING_MESSAGE = "Loading…"
+LOADING_COPIOT_MESSAGE = "Retrieving explanation…"
+CHART_LOADING_CAPTION = "Loading chart…"
+
+
+def chart_loading_placeholder():
+    """
+    Create a placeholder that shows "Loading chart…" until data is ready.
+    Returns an st.empty() placeholder. Call .empty() when ready to render the chart.
+    """
+    ph = st.empty()
+    with ph.container():
+        st.caption(CHART_LOADING_CAPTION)
+    return ph
+
 
 def render_error(message: str, *, sidebar: bool = False) -> None:
     """Display an error message with consistent styling."""

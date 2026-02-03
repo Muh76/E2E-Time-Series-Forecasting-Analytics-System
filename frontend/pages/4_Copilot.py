@@ -6,7 +6,7 @@ No forecasting logic; no raw data sent to LLM. Uses mock when API unavailable.
 import streamlit as st
 
 from components.api import copilot_explain, get_monitoring_summary
-from components.ui import render_warning
+from components.ui import LOADING_COPIOT_MESSAGE, render_warning
 
 
 def main() -> None:
@@ -25,7 +25,7 @@ def main() -> None:
         if not query or not query.strip():
             render_warning("Enter a question to continue.")
         else:
-            with st.spinner("Retrieving explanation..."):
+            with st.spinner(LOADING_COPIOT_MESSAGE):
                 monitoring_summary = get_monitoring_summary()
                 # Context: summary data only (performance, drift) — no raw time series
                 context = {
