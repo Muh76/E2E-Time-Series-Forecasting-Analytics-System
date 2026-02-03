@@ -6,6 +6,7 @@ import streamlit as st
 
 from components.api import get_forecast_vs_actual
 from components.charts import render_forecast_vs_actual_plotly
+from components.metrics import format_float, format_mape
 
 
 def main() -> None:
@@ -62,12 +63,11 @@ def main() -> None:
     st.subheader("Metrics")
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric(label="MAE", value=f"{mae:.4f}" if mae is not None else "—")
+        st.metric(label="MAE", value=format_float(mae))
     with col2:
-        st.metric(label="RMSE", value=f"{rmse:.4f}" if rmse is not None else "—")
+        st.metric(label="RMSE", value=format_float(rmse))
     with col3:
-        mape_display = f"{mape * 100:.2f}%" if mape is not None and mape < 1 else f"{mape:.4f}" if mape is not None else "—"
-        st.metric(label="MAPE", value=mape_display)
+        st.metric(label="MAPE", value=format_mape(mape))
 
 
 main()

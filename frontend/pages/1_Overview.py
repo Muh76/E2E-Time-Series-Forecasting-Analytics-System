@@ -7,6 +7,7 @@ from datetime import datetime
 import streamlit as st
 
 from components.api import get_monitoring_summary
+from components.metrics import format_float, format_mape
 
 
 def _format_timestamp(iso_str: str) -> str:
@@ -72,18 +73,17 @@ def main() -> None:
     drift = summary.get("drift") or {}
     mae = perf.get("mae")
     mape = perf.get("mape")
-    mape_display = mape * 100 if mape is not None and mape < 1 else mape
     drift_score = drift.get("overall_score")
 
     st.markdown("---")
     st.subheader("Key metrics")
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric(label="MAE", value=f"{mae:.4f}" if mae is not None else "—")
+        st.metric(label="MAE", value=format_float(mae))
     with col2:
-        st.metric(label="MAPE (%)", value=f"{mape_display:.2f}" if mape_display is not None else "—")
+        st.metric(label="MAPE", value=format_mape(mape))
     with col3:
-        st.metric(label="Drift score", value=f"{drift_score:.4f}" if drift_score is not None else "—")
+        st.metric(label="Drift score", value=format_float(drift_score))
 
     # As of timestamp
     as_of = summary.get("as_of")
