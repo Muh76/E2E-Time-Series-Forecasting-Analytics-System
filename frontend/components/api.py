@@ -3,8 +3,10 @@ API client utilities for the Streamlit frontend.
 
 Loads backend API base URL from config and provides helpers for API calls.
 Uses requests; returns mock data when backend is unavailable.
+Uses st.cache_data for successful and mock responses (separate cache keys).
 """
 
+import json
 import logging
 import os
 from datetime import datetime, timedelta, timezone
@@ -12,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import requests
+import streamlit as st
 import yaml
 
 # frontend/components/api.py -> parent.parent = frontend, parent.parent.parent = project root
@@ -212,26 +215,40 @@ def normalize_monitoring_summary(raw_summary: dict[str, Any] | None) -> dict[str
     return normalized
 
 
-def get_monitoring_summary(
-    model_version: str | None = None,
-    since: str | None = None,
+@st.cache_data(ttl=60)
+def _cached_monitoring_summary_api(
+    model_version: str | None,
+    since: str | None,
 ) -> dict[str, Any]:
-    """Fetch monitoring summary. Returns normalized mock data if backend is unavailable."""
+    """Cached API call; only successful responses are cached."""
     params: dict[str, str] = {}
     if model_version:
         params["model_version"] = model_version
     if since:
         params["since"] = since
-
     url = api_url("/api/v1/monitoring/summary")
+    resp = requests.get(url, params=params or None, timeout=_DEFAULT_TIMEOUT)
+    resp.raise_for_status()
+    return normalize_monitoring_summary(resp.json())
+
+
+@st.cache_data(ttl=60)
+def _cached_monitoring_summary_mock() -> dict[str, Any]:
+    """Cached mock response when API is unreachable."""
+    return _mock_monitoring_summary()
+
+
+def get_monitoring_summary(
+    model_version: str | None = None,
+    since: str | None = None,
+) -> dict[str, Any]:
+    """Fetch monitoring summary. Returns normalized mock data if backend is unavailable."""
     try:
-        resp = requests.get(url, params=params or None, timeout=_DEFAULT_TIMEOUT)
-        resp.raise_for_status()
-        return normalize_monitoring_summary(resp.json())
+        return _cached_monitoring_summary_api(model_version, since)
     except requests.RequestException as e:
         if _is_backend_unavailable(e):
             logger.warning("Backend unavailable, returning mock monitoring summary: %s", e)
-            return _mock_monitoring_summary()
+            return _cached_monitoring_summary_mock()
         raise
 
 
@@ -269,6 +286,40 @@ def _mock_monitoring_summary() -> dict[str, Any]:
     return normalize_monitoring_summary(raw)
 
 
+def _context_hash(context: dict[str, Any] | None) -> str:
+    """Stable string for cache key from context dict."""
+    if not context:
+        return ""
+    return json.dumps(context, sort_keys=True, default=str)
+
+
+@st.cache_data(ttl=120)
+def _cached_copilot_explain_api(
+    query: str,
+    context_serialized: str,
+    options_serialized: str,
+) -> dict[str, Any]:
+    """Cached API call; only successful responses are cached. Cache key includes query + context hash."""
+    context: dict[str, Any] | None = json.loads(context_serialized) if context_serialized else None
+    options: dict[str, Any] | None = json.loads(options_serialized) if options_serialized else None
+    payload: dict[str, Any] = {"query": query or "What is the current model health?"}
+    if context:
+        payload["context"] = context
+    if options:
+        payload["options"] = options
+    url = api_url("/api/v1/copilot/explain")
+    resp = requests.post(url, json=payload, timeout=30)
+    resp.raise_for_status()
+    return resp.json()
+
+
+@st.cache_data(ttl=120)
+def _cached_copilot_explain_mock(query: str, context_serialized: str) -> dict[str, Any]:
+    """Cached mock response when API is unreachable. Cache key includes query + context hash."""
+    context: dict[str, Any] | None = json.loads(context_serialized) if context_serialized else None
+    return _mock_copilot_explain(query, context)
+
+
 def copilot_explain(
     query: str,
     context: dict[str, Any] | None = None,
@@ -279,21 +330,14 @@ def copilot_explain(
     Pass monitoring_summary and metrics in context for grounding.
     Returns mock when backend unavailable or endpoint missing (404).
     """
-    payload: dict[str, Any] = {"query": query or "What is the current model health?"}
-    if context:
-        payload["context"] = context
-    if options:
-        payload["options"] = options
-
-    url = api_url("/api/v1/copilot/explain")
+    context_serialized = _context_hash(context)
+    options_serialized = _context_hash(options) if options else ""
     try:
-        resp = requests.post(url, json=payload, timeout=30)
-        resp.raise_for_status()
-        return resp.json()
+        return _cached_copilot_explain_api(query, context_serialized, options_serialized)
     except requests.RequestException as e:
         if _is_backend_unavailable(e, include_404=True):
             logger.warning("Copilot unavailable, returning mock explanation: %s", e)
-            return _mock_copilot_explain(query, context)
+            return _cached_copilot_explain_mock(query, context_serialized)
         raise
 
 
@@ -429,6 +473,30 @@ def _mock_metrics(
     }
 
 
+@st.cache_data(ttl=30)
+def _cached_forecast_vs_actual_api(
+    entity_id: str | None,
+    horizon: int,
+) -> dict[str, Any]:
+    """Cached API call; only successful responses are cached. Cache key includes entity_id + horizon."""
+    params: dict[str, str | int] = {"horizon": horizon}
+    if entity_id:
+        params["entity_id"] = entity_id
+    url = api_url("/api/v1/forecasts/vs-actual")
+    resp = requests.get(url, params=params, timeout=_DEFAULT_TIMEOUT)
+    resp.raise_for_status()
+    return resp.json()
+
+
+@st.cache_data(ttl=30)
+def _cached_forecast_vs_actual_mock(
+    entity_id: str | None,
+    horizon: int,
+) -> dict[str, Any]:
+    """Cached mock response when API is unreachable. Cache key includes entity_id + horizon."""
+    return _mock_forecast_vs_actual(entity_id, horizon)
+
+
 def get_forecast_vs_actual(
     entity_id: str | None = None,
     horizon: int = 14,
@@ -438,19 +506,12 @@ def get_forecast_vs_actual(
     Returns actual and forecast time series plus precomputed metrics (MAE, RMSE, MAPE).
     GET /api/v1/forecasts/vs-actual. Returns mock data if backend unavailable.
     """
-    params: dict[str, str | int] = {"horizon": horizon}
-    if entity_id:
-        params["entity_id"] = entity_id
-
-    url = api_url("/api/v1/forecasts/vs-actual")
     try:
-        resp = requests.get(url, params=params, timeout=_DEFAULT_TIMEOUT)
-        resp.raise_for_status()
-        return resp.json()
+        return _cached_forecast_vs_actual_api(entity_id, horizon)
     except requests.RequestException as e:
         if _is_backend_unavailable(e):
             logger.warning("Backend unavailable, returning mock forecast vs actual: %s", e)
-            return _mock_forecast_vs_actual(entity_id, horizon)
+            return _cached_forecast_vs_actual_mock(entity_id, horizon)
         raise
 
 
