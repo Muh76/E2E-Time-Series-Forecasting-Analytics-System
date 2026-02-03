@@ -9,6 +9,11 @@ from components.api import copilot_explain, get_monitoring_summary
 from components.ui import LOADING_COPIOT_MESSAGE, render_warning, with_loading
 
 
+def _summary_only(summary: dict) -> dict:
+    """Build summary-level context for LLM; exclude raw time-series data."""
+    return {k: v for k, v in summary.items() if k != "rolling_series"}
+
+
 def main() -> None:
     st.title("Insight Copilot")
 
@@ -20,17 +25,22 @@ def main() -> None:
     alert_context = st.session_state.pop("alert_context", None)
 
     if alert_context is not None:
-        alert_types = alert_context.get("type") or []
+        alerts = alert_context.get("alerts") or []
+        alert_types = [a.get("alert_type", "") for a in alerts if a.get("alert_type")]
         if not alert_types:
-            alert_types = list((alert_context.get("details") or {}).keys())
-        alert_label = " and ".join(alert_types) if len(alert_types) > 1 else (alert_types[0] if alert_types else "alert")
+            alert_types = ["alert"]
+        alert_label = " and ".join(alert_types) if len(alert_types) > 1 else alert_types[0]
         query = f"Explain why the {alert_label} alert was triggered and what it means."
 
-        monitoring_summary = alert_context.get("monitoring_summary") or {}
+        monitoring_summary = _summary_only(alert_context.get("monitoring_summary") or {})
         context = {
             "monitoring_summary": monitoring_summary,
             "performance": monitoring_summary.get("performance") or {},
             "drift": monitoring_summary.get("drift") or {},
+            "alert_context": {
+                "alerts": alerts,
+                "timestamp": alert_context.get("timestamp"),
+            },
         }
         result = with_loading(copilot_explain, query=query, context=context, message=LOADING_COPIOT_MESSAGE)
 
@@ -71,7 +81,7 @@ def main() -> None:
             render_warning("Enter a question to continue.")
         else:
             def _fetch_and_explain():
-                monitoring_summary = get_monitoring_summary()
+                monitoring_summary = _summary_only(get_monitoring_summary())
                 context = {
                     "monitoring_summary": monitoring_summary,
                     "performance": monitoring_summary.get("performance") or {},
