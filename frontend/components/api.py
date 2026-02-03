@@ -185,7 +185,7 @@ def _mock_monitoring_summary() -> dict[str, Any]:
         {"date": (today - timedelta(days=i)).isoformat(), "value": 3.5 + (i % 3) * 0.5}
         for i in range(6, -1, -1)
     ]
-    per_feature = {"lag_1": 0.12, "lag_7": 0.18, "rolling_7": 0.22, "day_of_week": 0.08}
+    per_feature = {"lag_1": 0.12, "lag_7": 0.18, "rolling_7": 0.28, "day_of_week": 0.08}
     return {
         "model_name": "LightGBM",
         "model_version": "v1.0.0",

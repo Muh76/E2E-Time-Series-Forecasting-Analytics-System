@@ -1,5 +1,6 @@
 """
-Copilot page — AI-assisted explanations and insights.
+Insight Copilot — AI-assisted explanations from monitoring and drift results.
+No forecasting logic; no raw data sent to LLM. Uses mock when API unavailable.
 """
 
 import sys
@@ -11,21 +12,15 @@ if str(FRONTEND_DIR) not in sys.path:
 
 import streamlit as st
 
-from components.api import copilot_explain, get_api_base_url, get_metrics, get_monitoring_summary
+from components.api import copilot_explain, get_monitoring_summary
 
 
 def main() -> None:
-    st.title("Copilot")
-    st.markdown("Natural language explanations for forecasts and model metrics.")
+    st.title("Insight Copilot")
 
-    st.info("Copilot explains forecasts and metrics using precomputed data. It does not perform prediction.")
-
-    api_base = get_api_base_url()
-    st.caption(f"API: `{api_base}`")
+    st.warning("⚠️ Copilot explains results — it does not generate predictions.")
 
     st.markdown("---")
-    st.subheader("Query")
-
     query = st.text_input(
         "Enter your question",
         placeholder="e.g. Why did the forecast increase? What does the current MAE indicate?",
@@ -38,19 +33,13 @@ def main() -> None:
         else:
             with st.spinner("Retrieving explanation..."):
                 monitoring_summary = get_monitoring_summary()
-                metrics = get_metrics()
-
+                # Context: summary data only (performance, drift) — no raw time series
                 context = {
-                    "include_metrics": True,
                     "monitoring_summary": monitoring_summary,
-                    "metrics": metrics,
+                    "performance": monitoring_summary.get("performance") or {},
+                    "drift": monitoring_summary.get("drift") or {},
                 }
-
-                result = copilot_explain(
-                    query=query.strip(),
-                    context=context,
-                    options={"max_tokens": 512, "format": "plain"},
-                )
+                result = copilot_explain(query=query.strip(), context=context)
 
             explanation = result.get("explanation", "")
             sources = result.get("sources", [])
@@ -58,16 +47,16 @@ def main() -> None:
 
             st.markdown("---")
             st.subheader("Response")
-            st.markdown(explanation)
+            with st.container():
+                st.markdown(explanation)
 
             if sources:
                 with st.expander("Sources"):
                     for s in sources:
-                        st.write(f"- {s.get('type', '')}: {s}")
+                        st.write(f"- {s.get('type', '')}: {s.get('note', s)}")
 
             if generated_at:
                 st.caption(f"Generated at {generated_at}")
 
 
-if __name__ == "__main__":
-    main()
+main()
