@@ -50,17 +50,22 @@ def main() -> None:
 
     any_alert = mae_alerted or mape_alerted or drift_alerted
     if any_alert:
-        active_alerts = []
+        perf = summary.get("performance") or {}
+        drift_data = summary.get("drift") or {}
+        details = {}
         if mae_alerted:
-            active_alerts.append("MAE")
+            details["MAE"] = {"threshold": mae_alert, "current_value": perf.get("mae")}
         if mape_alerted:
-            active_alerts.append("MAPE")
+            details["MAPE"] = {"threshold": mape_alert, "current_value": perf.get("mape")}
         if drift_alerted:
-            active_alerts.append("Drift")
-        alert_label = ", ".join(active_alerts)
+            details["Drift"] = {"threshold": drift_threshold, "current_value": drift_data.get("overall_score")}
+
         if st.button("Explain this alert", key="explain_alert_btn"):
-            st.session_state["copilot_alert_type"] = alert_label
-            st.session_state["copilot_alert_context"] = summary
+            st.session_state["alert_context"] = {
+                "type": list(details.keys()),
+                "details": details,
+                "monitoring_summary": summary,
+            }
             st.switch_page("pages/4_Copilot.py")
 
     # --- Section 1: Performance Monitoring ---

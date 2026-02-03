@@ -17,15 +17,20 @@ def main() -> None:
     st.markdown("---")
 
     # Check for alert context from Monitoring page redirect
-    alert_context = st.session_state.pop("copilot_alert_context", None)
-    alert_type = st.session_state.pop("copilot_alert_type", None)
+    alert_context = st.session_state.pop("alert_context", None)
 
-    if alert_context is not None and alert_type:
-        query = f"Explain the {alert_type} alert"
+    if alert_context is not None:
+        alert_types = alert_context.get("type") or []
+        if not alert_types:
+            alert_types = list((alert_context.get("details") or {}).keys())
+        alert_label = " and ".join(alert_types) if len(alert_types) > 1 else (alert_types[0] if alert_types else "alert")
+        query = f"Explain why the {alert_label} alert was triggered and what it means."
+
+        monitoring_summary = alert_context.get("monitoring_summary") or {}
         context = {
-            "monitoring_summary": alert_context,
-            "performance": alert_context.get("performance") or {},
-            "drift": alert_context.get("drift") or {},
+            "monitoring_summary": monitoring_summary,
+            "performance": monitoring_summary.get("performance") or {},
+            "drift": monitoring_summary.get("drift") or {},
         }
         result = with_loading(copilot_explain, query=query, context=context, message=LOADING_COPIOT_MESSAGE)
 
