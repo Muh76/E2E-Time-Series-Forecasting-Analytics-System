@@ -7,7 +7,7 @@ import streamlit as st
 from components.api import get_forecast_vs_actual
 from components.charts import render_forecast_vs_actual_plotly
 from components.metrics import format_float, format_mape
-from components.ui import LOADING_MESSAGE, chart_loading_placeholder
+from components.ui import chart_loading_placeholder, with_loading
 
 
 def main() -> None:
@@ -17,7 +17,8 @@ def main() -> None:
     horizon = st.slider("Forecast horizon (days)", min_value=7, max_value=30, value=14, key="forecast_horizon")
 
     chart_ph = chart_loading_placeholder()
-    with st.spinner(LOADING_MESSAGE):
+
+    def _fetch_and_build():
         data = get_forecast_vs_actual(horizon=horizon)
         entity_ids = data.get("entity_ids") or []
         entity_id = data.get("entity_id")
@@ -38,6 +39,9 @@ def main() -> None:
         all_dates = sorted(set(date_to_actual) | set(date_to_forecast))
         actual_vals = [date_to_actual.get(d) for d in all_dates]
         forecast_vals = [date_to_forecast.get(d) for d in all_dates]
+        return data, all_dates, actual_vals, forecast_vals
+
+    data, all_dates, actual_vals, forecast_vals = with_loading(_fetch_and_build)
     chart_ph.empty()
     render_forecast_vs_actual_plotly(
         dates=all_dates,

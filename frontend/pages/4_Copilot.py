@@ -6,7 +6,7 @@ No forecasting logic; no raw data sent to LLM. Uses mock when API unavailable.
 import streamlit as st
 
 from components.api import copilot_explain, get_monitoring_summary
-from components.ui import LOADING_COPIOT_MESSAGE, render_warning
+from components.ui import LOADING_COPIOT_MESSAGE, render_warning, with_loading
 
 
 def main() -> None:
@@ -27,8 +27,7 @@ def main() -> None:
             "performance": alert_context.get("performance") or {},
             "drift": alert_context.get("drift") or {},
         }
-        with st.spinner(LOADING_COPIOT_MESSAGE):
-            result = copilot_explain(query=query, context=context)
+        result = with_loading(copilot_explain, query=query, context=context, message=LOADING_COPIOT_MESSAGE)
 
         st.text_input(
             "Enter your question",
@@ -66,14 +65,16 @@ def main() -> None:
         if not query or not query.strip():
             render_warning("Enter a question to continue.")
         else:
-            with st.spinner(LOADING_COPIOT_MESSAGE):
+            def _fetch_and_explain():
                 monitoring_summary = get_monitoring_summary()
                 context = {
                     "monitoring_summary": monitoring_summary,
                     "performance": monitoring_summary.get("performance") or {},
                     "drift": monitoring_summary.get("drift") or {},
                 }
-                result = copilot_explain(query=query.strip(), context=context)
+                return copilot_explain(query=query.strip(), context=context)
+
+            result = with_loading(_fetch_and_explain, message=LOADING_COPIOT_MESSAGE)
 
             explanation = result.get("explanation", "")
             sources = result.get("sources", [])

@@ -8,7 +8,7 @@ import streamlit as st
 
 from components.api import get_monitoring_summary
 from components.metrics import format_float, format_mape
-from components.ui import LOADING_MESSAGE
+from components.ui import with_loading
 
 
 def _format_timestamp(iso_str: str) -> str:
@@ -46,8 +46,7 @@ def main() -> None:
     st.title("System Overview")
     st.markdown("Current system health and model status.")
 
-    with st.spinner(LOADING_MESSAGE):
-        summary = get_monitoring_summary()
+    summary = with_loading(get_monitoring_summary)
 
     # Overall status
     pipeline = summary.get("pipeline") or {}
