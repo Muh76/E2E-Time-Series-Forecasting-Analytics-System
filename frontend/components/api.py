@@ -233,8 +233,11 @@ def _cached_monitoring_summary_api(
 
 
 @st.cache_data(ttl=60)
-def _cached_monitoring_summary_mock() -> dict[str, Any]:
-    """Cached mock response when API is unreachable."""
+def _cached_monitoring_summary_mock(
+    model_version: str | None,
+    since: str | None,
+) -> dict[str, Any]:
+    """Cached mock response when API is unreachable. Cache key includes model_version + since."""
     return _mock_monitoring_summary()
 
 
@@ -248,7 +251,7 @@ def get_monitoring_summary(
     except requests.RequestException as e:
         if _is_backend_unavailable(e):
             logger.warning("Backend unavailable, returning mock monitoring summary: %s", e)
-            return _cached_monitoring_summary_mock()
+            return _cached_monitoring_summary_mock(model_version, since)
         raise
 
 
@@ -314,8 +317,12 @@ def _cached_copilot_explain_api(
 
 
 @st.cache_data(ttl=120)
-def _cached_copilot_explain_mock(query: str, context_serialized: str) -> dict[str, Any]:
-    """Cached mock response when API is unreachable. Cache key includes query + context hash."""
+def _cached_copilot_explain_mock(
+    query: str,
+    context_serialized: str,
+    options_serialized: str,
+) -> dict[str, Any]:
+    """Cached mock response when API is unreachable. Cache key includes query + context + options."""
     context: dict[str, Any] | None = json.loads(context_serialized) if context_serialized else None
     return _mock_copilot_explain(query, context)
 
@@ -337,7 +344,7 @@ def copilot_explain(
     except requests.RequestException as e:
         if _is_backend_unavailable(e, include_404=True):
             logger.warning("Copilot unavailable, returning mock explanation: %s", e)
-            return _cached_copilot_explain_mock(query, context_serialized)
+            return _cached_copilot_explain_mock(query, context_serialized, options_serialized)
         raise
 
 
