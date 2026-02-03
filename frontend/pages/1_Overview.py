@@ -2,13 +2,7 @@
 Overview page — system health and status.
 """
 
-import sys
 from datetime import datetime
-from pathlib import Path
-
-FRONTEND_DIR = Path(__file__).resolve().parent.parent
-if str(FRONTEND_DIR) not in sys.path:
-    sys.path.insert(0, str(FRONTEND_DIR))
 
 import streamlit as st
 

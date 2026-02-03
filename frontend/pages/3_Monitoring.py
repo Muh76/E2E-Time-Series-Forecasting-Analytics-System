@@ -3,13 +3,6 @@ Monitoring & Drift — performance metrics, drift detection, and alerts.
 Read-only; all data and charts from API. Uses mock when API unavailable.
 """
 
-import sys
-from pathlib import Path
-
-FRONTEND_DIR = Path(__file__).resolve().parent.parent
-if str(FRONTEND_DIR) not in sys.path:
-    sys.path.insert(0, str(FRONTEND_DIR))
-
 import streamlit as st
 
 from components.api import get_monitoring_summary
