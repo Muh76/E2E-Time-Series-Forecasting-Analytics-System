@@ -1,10 +1,8 @@
 """
-Forecast page — generate and explore time series forecasts.
+Forecast vs Actual — compare actual historical values with forecasts.
 """
 
-import math
 import sys
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent
@@ -13,123 +11,70 @@ if str(FRONTEND_DIR) not in sys.path:
 
 import streamlit as st
 
-from components.api import get_api_base_url, get_forecasts, get_metrics
+from components.api import get_forecast_vs_actual
 from components.charts import render_forecast_vs_actual_plotly
 
 
-def _compute_mae_rmse(actual: list[float], forecast: list[float]) -> tuple[float, float]:
-    """Compute MAE and RMSE from aligned actual and forecast lists."""
-    if not actual or not forecast or len(actual) != len(forecast):
-        return float("nan"), float("nan")
-    n = len(actual)
-    mae = sum(abs(a - f) for a, f in zip(actual, forecast)) / n
-    rmse = (sum((a - f) ** 2 for a, f in zip(actual, forecast)) / n) ** 0.5
-    return mae, rmse
-
-
 def main() -> None:
-    st.title("Forecast")
-    st.markdown("Time series forecasts and evaluation metrics.")
+    st.title("Forecast vs Actual")
 
-    api_base = get_api_base_url()
-    st.caption(f"API: `{api_base}`")
+    # Horizon selector (7–30 days)
+    horizon = st.slider("Forecast horizon (days)", min_value=7, max_value=30, value=14, key="forecast_horizon")
 
-    # Fetch data
-    metrics = get_metrics()
-    data = metrics.get("data") or []
-    meta = metrics.get("meta") or {}
-    series_ids = meta.get("series_ids") or []
-    if not series_ids and data:
-        series_ids = sorted({r.get("series_id") for r in data if r.get("series_id")})
-    if not series_ids:
-        series_ids = ["series_001"]
+    # Fetch data via API (returns mock if unavailable)
+    data = get_forecast_vs_actual(horizon=horizon)
+    entity_ids = data.get("entity_ids") or []
+    entity_id = data.get("entity_id")
 
-    forecast_resp = get_forecasts(series_ids=series_ids, horizon_steps=14)
+    # Entity selector (only if entity_ids exist)
+    selected_entity = entity_id
+    if entity_ids:
+        selected_entity = st.selectbox(
+            "Entity",
+            options=entity_ids,
+            index=entity_ids.index(entity_id) if entity_id in entity_ids else 0,
+            key="forecast_entity",
+        )
+        # Re-fetch for selected entity if different
+        if selected_entity != entity_id:
+            data = get_forecast_vs_actual(entity_id=selected_entity, horizon=horizon)
 
-    # Entity selector
-    st.markdown("---")
-    st.subheader("Entity")
-    selected_entity = st.selectbox(
-        "Entity",
-        options=series_ids,
-        index=0,
-        key="forecast_entity",
+    # Build ready-to-plot data (API returns {date, value} lists)
+    actual_list = data.get("actual") or []
+    forecast_list = data.get("forecast") or []
+
+    # Merge into unified timeline: actual = solid, forecast = dashed
+    date_to_actual = {r["date"]: r["value"] for r in actual_list}
+    date_to_forecast = {r["date"]: r["value"] for r in forecast_list}
+    all_dates = sorted(set(date_to_actual) | set(date_to_forecast))
+
+    actual_vals = [date_to_actual.get(d) for d in all_dates]
+    forecast_vals = [date_to_forecast.get(d) for d in all_dates]
+
+    # Chart
+    render_forecast_vs_actual_plotly(
+        dates=all_dates,
+        actual=actual_vals,
+        forecast=forecast_vals,
+        title="",
     )
 
-    # Filter data for selected entity
-    entity_data = [r for r in data if r.get("series_id") == selected_entity]
-    entity_forecast = next(
-        (f for f in (forecast_resp.get("forecasts") or []) if f.get("series_id") == selected_entity),
-        None,
-    )
-
-    # Horizon
-    horizon = 0
-    if entity_forecast:
-        steps = entity_forecast.get("steps") or []
-        point_forecast = entity_forecast.get("point_forecast") or []
-        horizon = len(steps) or len(point_forecast)
-    if horizon == 0:
-        horizon = 14
-
-    st.markdown("### Horizon")
-    st.metric(label="Forecast steps", value=horizon)
-
-    # Build chart data: actual vs forecast
-    dates = [r["date"] for r in entity_data if "date" in r]
-    actual_vals = [r["actual"] for r in entity_data if "actual" in r]
-    forecast_vals = [r["forecast"] for r in entity_data if "forecast" in r]
-
-    # Append future forecast if available
-    if entity_forecast:
-        point_forecast = entity_forecast.get("point_forecast") or []
-        if point_forecast and dates:
-            last_date = datetime.fromisoformat(dates[-1]).date()
-            for i in range(len(point_forecast)):
-                d = (last_date + timedelta(days=i + 1)).isoformat()
-                dates.append(d)
-                forecast_vals.append(point_forecast[i])
-                if len(actual_vals) < len(dates):
-                    actual_vals.append(None)
-        elif point_forecast:
-            for i, v in enumerate(point_forecast):
-                d = (datetime.now(timezone.utc).date() + timedelta(days=i + 1)).isoformat()
-                dates.append(d)
-                forecast_vals.append(v)
-
-    # Extend actual to match length (use None for future)
-    while len(actual_vals) < len(forecast_vals):
-        actual_vals.append(None)
-    actual_vals = actual_vals[: len(dates)]
-    forecast_vals = forecast_vals[: len(dates)]
-
-    # Filter out None for actual when computing metrics
-    actual_for_metrics = [a for a in actual_vals if a is not None]
-    forecast_for_metrics = forecast_vals[: len(actual_for_metrics)]
-
-    # MAE / RMSE
-    mae, rmse = _compute_mae_rmse(actual_for_metrics, forecast_for_metrics)
+    # Metrics below chart (from API; no frontend computation)
+    metrics = data.get("metrics") or {}
+    mae = metrics.get("mae")
+    rmse = metrics.get("rmse")
+    mape = metrics.get("mape")
 
     st.markdown("---")
     st.subheader("Metrics")
-    st.caption("MAE and RMSE computed over the selected entity's historical forecast period.")
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric(label="MAE", value=f"{mae:.4f}" if not math.isnan(mae) else "—")
+        st.metric(label="MAE", value=f"{mae:.4f}" if mae is not None else "—")
     with col2:
-        st.metric(label="RMSE", value=f"{rmse:.4f}" if not math.isnan(rmse) else "—")
-
-    # Line chart: actual vs forecast
-    st.markdown("---")
-    st.subheader("Actual vs Forecast")
-    # For Plotly, use None for missing actual (will show gap)
-    actual_plot = [a if a is not None else None for a in actual_vals]
-    render_forecast_vs_actual_plotly(
-        dates=dates,
-        actual=actual_plot,
-        forecast=forecast_vals,
-        title=f"{selected_entity} — Actual vs Forecast",
-    )
+        st.metric(label="RMSE", value=f"{rmse:.4f}" if rmse is not None else "—")
+    with col3:
+        mape_display = f"{mape * 100:.2f}%" if mape is not None and mape < 1 else f"{mape:.4f}" if mape is not None else "—"
+        st.metric(label="MAPE", value=mape_display)
 
 
 main()

@@ -68,9 +68,10 @@ def render_forecast_vs_actual_plotly(
     fig.update_layout(
         title=title,
         xaxis_title="Date",
-        yaxis_title="Value",
+        yaxis_title="Target value",
         hovermode="x unified",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(t=40, b=60, l=60, r=40),
     )
     st.plotly_chart(fig, use_container_width=True)
 
