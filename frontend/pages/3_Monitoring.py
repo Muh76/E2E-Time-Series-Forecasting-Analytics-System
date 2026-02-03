@@ -7,15 +7,14 @@ import streamlit as st
 
 from components.api import get_monitoring_summary
 from components.charts import render_drift_bar_chart, render_rolling_metric_chart
-from components.ui import LOADING_MESSAGE, chart_loading_placeholder, render_empty_state
+from components.ui import chart_loading_placeholder, render_empty_state, with_loading
 
 
 def main() -> None:
     st.title("Monitoring & Drift")
 
     chart_ph = chart_loading_placeholder()
-    with st.spinner(LOADING_MESSAGE):
-        summary = get_monitoring_summary()
+    summary = with_loading(get_monitoring_summary)
     chart_ph.empty()
 
     # Thresholds from API only (mock includes them when backend unavailable)
