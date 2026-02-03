@@ -43,15 +43,18 @@ def render_forecast_vs_actual_plotly(
     actual: list[float | None],
     forecast: list[float],
     title: str = "Forecast vs Actual",
+    baseline: list[float | None] | None = None,
 ) -> None:
     """
     Render actual vs forecast line chart with Plotly.
+    Optionally overlay baseline as dashed gray line.
 
     Args:
         dates: List of date strings for x-axis.
         actual: List of actual values (None for future dates).
         forecast: List of forecast values.
         title: Chart title.
+        baseline: Optional list of baseline forecast values; shown as dashed gray line.
     """
     if not dates:
         render_empty_state("No forecast data available.")
@@ -67,6 +70,17 @@ def render_forecast_vs_actual_plotly(
     fig.add_trace(
         go.Scatter(x=dates, y=forecast, mode="lines", name="Forecast", line=dict(color="#ef4444", dash="dash"))
     )
+    if baseline is not None:
+        baseline_padded = (list(baseline) + [None] * n)[:n]
+        fig.add_trace(
+            go.Scatter(
+                x=dates,
+                y=baseline_padded,
+                mode="lines",
+                name="Baseline",
+                line=dict(color="#6b7280", dash="dash"),
+            )
+        )
     fig.update_layout(
         title=title,
         xaxis_title="Date",

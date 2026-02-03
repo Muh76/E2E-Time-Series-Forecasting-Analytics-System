@@ -484,9 +484,10 @@ def _mock_metrics(
 def _cached_forecast_vs_actual_api(
     entity_id: str | None,
     horizon: int,
+    include_baseline: bool,
 ) -> dict[str, Any]:
-    """Cached API call; only successful responses are cached. Cache key includes entity_id + horizon."""
-    params: dict[str, str | int] = {"horizon": horizon}
+    """Cached API call; only successful responses are cached."""
+    params: dict[str, str | int | bool] = {"horizon": horizon, "include_baseline": include_baseline}
     if entity_id:
         params["entity_id"] = entity_id
     url = api_url("/api/v1/forecasts/vs-actual")
@@ -499,14 +500,16 @@ def _cached_forecast_vs_actual_api(
 def _cached_forecast_vs_actual_mock(
     entity_id: str | None,
     horizon: int,
+    include_baseline: bool,
 ) -> dict[str, Any]:
-    """Cached mock response when API is unreachable. Cache key includes entity_id + horizon."""
-    return _mock_forecast_vs_actual(entity_id, horizon)
+    """Cached mock response when API is unreachable."""
+    return _mock_forecast_vs_actual(entity_id, horizon, include_baseline)
 
 
 def get_forecast_vs_actual(
     entity_id: str | None = None,
     horizon: int = 14,
+    include_baseline: bool = False,
 ) -> dict[str, Any]:
     """
     Fetch forecast vs actual data ready for plotting.
@@ -514,15 +517,19 @@ def get_forecast_vs_actual(
     GET /api/v1/forecasts/vs-actual. Returns mock data if backend unavailable.
     """
     try:
-        return _cached_forecast_vs_actual_api(entity_id, horizon)
+        return _cached_forecast_vs_actual_api(entity_id, horizon, include_baseline)
     except requests.RequestException as e:
         if _is_backend_unavailable(e):
             logger.warning("Backend unavailable, returning mock forecast vs actual: %s", e)
-            return _cached_forecast_vs_actual_mock(entity_id, horizon)
+            return _cached_forecast_vs_actual_mock(entity_id, horizon, include_baseline)
         raise
 
 
-def _mock_forecast_vs_actual(entity_id: str | None, horizon: int) -> dict[str, Any]:
+def _mock_forecast_vs_actual(
+    entity_id: str | None,
+    horizon: int,
+    include_baseline: bool = False,
+) -> dict[str, Any]:
     """Mock forecast vs actual with ready-to-plot data and metrics."""
     today = datetime.now(timezone.utc).date()
     entity_ids = ["series_001", "series_002", "series_003"]
@@ -554,12 +561,18 @@ def _mock_forecast_vs_actual(entity_id: str | None, horizon: int) -> dict[str, A
 
     # Precomputed metrics (API returns these; no frontend computation)
     metrics = {"mae": 2.34, "rmse": 3.01, "mape": 0.042}
-
-    return {
+    result: dict[str, Any] = {
         "entity_id": eid,
         "entity_ids": entity_ids,
         "actual": [{"date": d, "value": v} for d, v in zip(actual_dates, actual_values)],
         "forecast": [{"date": d, "value": v} for d, v in zip(forecast_dates, forecast_values)],
         "metrics": metrics,
+        "model_name": "LightGBM",
         "horizon": horizon,
     }
+    if include_baseline:
+        baseline_values = [round(v - 0.5 + (i % 4) * 0.2, 2) for i, v in enumerate(forecast_values)]
+        result["baseline"] = [{"date": d, "value": v} for d, v in zip(forecast_dates, baseline_values)]
+        result["baseline_metrics"] = {"mae": 2.89, "rmse": 3.52, "mape": 0.051}
+        result["baseline_model_name"] = "Baseline"
+    return result
