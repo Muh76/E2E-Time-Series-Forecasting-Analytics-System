@@ -3,11 +3,19 @@ Monitoring & Drift — performance metrics, drift detection, and alerts.
 Read-only; all data and charts from API. Uses mock when API unavailable.
 """
 
+from datetime import datetime, timezone
+
 import streamlit as st
 
 from components.api import get_monitoring_summary
 from components.charts import render_drift_bar_chart, render_rolling_metric_chart
 from components.ui import chart_loading_placeholder, render_empty, with_loading
+
+
+def _summary_for_copilot(summary: dict) -> dict:
+    """Build summary-level context for Copilot; exclude raw time-series data."""
+    out = {k: v for k, v in summary.items() if k != "rolling_series"}
+    return out
 
 
 def main() -> None:
@@ -52,19 +60,34 @@ def main() -> None:
     if any_alert:
         perf = summary.get("performance") or {}
         drift_data = summary.get("drift") or {}
-        details = {}
+        alerts_list = []
         if mae_alerted:
-            details["MAE"] = {"threshold": mae_alert, "current_value": perf.get("mae")}
+            alerts_list.append({
+                "alert_type": "MAE",
+                "current_value": perf.get("mae"),
+                "threshold": mae_alert,
+            })
         if mape_alerted:
-            details["MAPE"] = {"threshold": mape_alert, "current_value": perf.get("mape")}
+            alerts_list.append({
+                "alert_type": "MAPE",
+                "current_value": perf.get("mape"),
+                "threshold": mape_alert,
+            })
         if drift_alerted:
-            details["Drift"] = {"threshold": drift_threshold, "current_value": drift_data.get("overall_score")}
+            alerts_list.append({
+                "alert_type": "Drift",
+                "current_value": drift_data.get("overall_score"),
+                "threshold": drift_threshold,
+            })
 
         if st.button("Explain this alert", key="explain_alert_btn"):
+            timestamp = summary.get("as_of") or datetime.now(timezone.utc).isoformat()
+            if isinstance(timestamp, str) and "Z" in timestamp:
+                timestamp = timestamp.replace("Z", "+00:00")
             st.session_state["alert_context"] = {
-                "type": list(details.keys()),
-                "details": details,
-                "monitoring_summary": summary,
+                "alerts": alerts_list,
+                "timestamp": timestamp,
+                "monitoring_summary": _summary_for_copilot(summary),
             }
             st.switch_page("pages/4_Copilot.py")
 
