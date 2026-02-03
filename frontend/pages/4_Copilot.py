@@ -6,12 +6,13 @@ No forecasting logic; no raw data sent to LLM. Uses mock when API unavailable.
 import streamlit as st
 
 from components.api import copilot_explain, get_monitoring_summary
+from components.ui import render_warning
 
 
 def main() -> None:
     st.title("Insight Copilot")
 
-    st.warning("⚠️ Copilot explains results — it does not generate predictions.")
+    render_warning("Copilot explains results; it does not generate predictions.")
 
     st.markdown("---")
     query = st.text_input(
@@ -22,7 +23,7 @@ def main() -> None:
 
     if st.button("Submit", type="primary", key="copilot_submit"):
         if not query or not query.strip():
-            st.warning("Enter a question to continue.")
+            render_warning("Enter a question to continue.")
         else:
             with st.spinner("Retrieving explanation..."):
                 monitoring_summary = get_monitoring_summary()
