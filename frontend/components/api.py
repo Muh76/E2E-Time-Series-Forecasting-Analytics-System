@@ -58,6 +58,19 @@ def api_url(path: str) -> str:
     return f"{base}{path}"
 
 
+def check_api_health() -> bool:
+    """
+    Check if the backend API is reachable.
+    Calls GET /health/live. Returns True if status 200, else False.
+    Handles timeout and connection errors safely; never raises.
+    """
+    try:
+        resp = requests.get(api_url("/health/live"), timeout=5)
+        return resp.status_code == 200
+    except Exception:
+        return False
+
+
 def _is_backend_unavailable(exc: BaseException, include_404: bool = False) -> bool:
     """Return True if the exception indicates backend is unreachable."""
     if isinstance(exc, (requests.ConnectionError, requests.Timeout)):

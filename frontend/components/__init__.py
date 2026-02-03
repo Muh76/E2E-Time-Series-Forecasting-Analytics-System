@@ -2,6 +2,7 @@
 
 from components.api import (
     api_url,
+    check_api_health,
     copilot_explain,
     get_api_base_url,
     get_forecasts,
@@ -19,6 +20,7 @@ from components.metrics import render_metrics_cards, render_metric_single
 
 __all__ = [
     "api_url",
+    "check_api_health",
     "copilot_explain",
     "get_api_base_url",
     "get_forecasts",
