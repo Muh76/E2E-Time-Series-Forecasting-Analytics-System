@@ -196,6 +196,7 @@ def _mock_monitoring_summary() -> dict[str, Any]:
             "last_checked": now,
             "indicators": [],
             "per_feature_scores": per_feature,
+            "overall_score": 0.18,
             "threshold": 0.25,
         },
         "pipeline": {"last_training": now, "last_etl": now, "status": "ok"},
@@ -362,4 +363,72 @@ def _mock_metrics(
     return {
         "data": data,
         "meta": {"series_ids": series_ids, "start_date": start_date, "end_date": end_date, "count": len(data)},
+    }
+
+
+def get_forecast_vs_actual(
+    entity_id: str | None = None,
+    horizon: int = 14,
+) -> dict[str, Any]:
+    """
+    Fetch forecast vs actual data ready for plotting.
+    Returns actual and forecast time series plus precomputed metrics (MAE, RMSE, MAPE).
+    GET /api/v1/forecasts/vs-actual. Returns mock data if backend unavailable.
+    """
+    params: dict[str, str | int] = {"horizon": horizon}
+    if entity_id:
+        params["entity_id"] = entity_id
+
+    url = api_url("/api/v1/forecasts/vs-actual")
+    try:
+        resp = requests.get(url, params=params, timeout=_DEFAULT_TIMEOUT)
+        resp.raise_for_status()
+        return resp.json()
+    except requests.RequestException as e:
+        if _is_backend_unavailable(e):
+            logger.warning("Backend unavailable, returning mock forecast vs actual: %s", e)
+            return _mock_forecast_vs_actual(entity_id, horizon)
+        raise
+
+
+def _mock_forecast_vs_actual(entity_id: str | None, horizon: int) -> dict[str, Any]:
+    """Mock forecast vs actual with ready-to-plot data and metrics."""
+    today = datetime.now(timezone.utc).date()
+    entity_ids = ["series_001", "series_002", "series_003"]
+    eid = entity_id or entity_ids[0]
+    if eid not in entity_ids:
+        entity_ids = [eid] + entity_ids
+
+    # Historical actual + forecast overlap (last 14 days)
+    hist_days = 14
+    actual_dates: list[str] = []
+    actual_values: list[float] = []
+    forecast_dates: list[str] = []
+    forecast_values: list[float] = []
+
+    base = 100.0
+    for i in range(hist_days):
+        d = (today - timedelta(days=hist_days - 1 - i)).isoformat()
+        actual_dates.append(d)
+        val = base + (i % 7) * 2.0
+        actual_values.append(round(val, 2))
+        forecast_values.append(round(val + 0.3 * (i % 3 - 1), 2))
+        forecast_dates.append(d)
+
+    # Future forecast only
+    for i in range(1, horizon + 1):
+        d = (today + timedelta(days=i)).isoformat()
+        forecast_dates.append(d)
+        forecast_values.append(round(base + (i % 5) * 1.5, 2))
+
+    # Precomputed metrics (API returns these; no frontend computation)
+    metrics = {"mae": 2.34, "rmse": 3.01, "mape": 0.042}
+
+    return {
+        "entity_id": eid,
+        "entity_ids": entity_ids,
+        "actual": [{"date": d, "value": v} for d, v in zip(actual_dates, actual_values)],
+        "forecast": [{"date": d, "value": v} for d, v in zip(forecast_dates, forecast_values)],
+        "metrics": metrics,
+        "horizon": horizon,
     }
