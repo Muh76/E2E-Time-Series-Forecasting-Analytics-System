@@ -6,7 +6,7 @@ Provides reusable UI for showing MAE, RMSE, MAPE and other evaluation metrics.
 
 import streamlit as st
 
-from components.ui import render_empty_state
+from components.ui import render_empty
 
 
 def format_float(value: float | None, decimals: int = 4) -> str:
@@ -34,7 +34,7 @@ def render_metrics_cards(metrics: dict, columns=None):
         columns: Optional list of column objects from st.columns(); creates default if None.
     """
     if not metrics:
-        render_empty_state("No metrics available.")
+        render_empty("No metrics available.")
         return
     cols = columns or st.columns(len(metrics))
     for i, (name, value) in enumerate(metrics.items()):
