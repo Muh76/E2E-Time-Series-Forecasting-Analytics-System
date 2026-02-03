@@ -7,6 +7,7 @@ import streamlit as st
 
 from components.api import get_monitoring_summary
 from components.charts import render_drift_bar_chart, render_rolling_metric_chart
+from components.ui import render_empty_state
 
 
 def main() -> None:
@@ -66,7 +67,7 @@ def main() -> None:
                 threshold_label=f"Alert ({mae_alert})",
             )
         else:
-            st.info("No rolling MAE data available.")
+            render_empty_state("No rolling MAE data available.")
     with col2:
         if rolling_mape:
             dates = [r["date"] for r in rolling_mape]
@@ -80,7 +81,7 @@ def main() -> None:
                 threshold_label=f"Alert ({mape_alert}%)",
             )
         else:
-            st.info("No rolling MAPE data available.")
+            render_empty_state("No rolling MAPE data available.")
 
     # --- Section 2: Drift Monitoring ---
     st.markdown("---")
@@ -101,7 +102,7 @@ def main() -> None:
             title="Per-feature drift scores",
         )
     else:
-        st.info("No drift data available for features.")
+        render_empty_state("No drift data available for features.")
 
 
 main()

@@ -22,6 +22,7 @@ import streamlit as st
 import yaml
 
 from components.api import check_api_health, get_api_base_url
+from components.ui import render_empty_state, render_warning
 
 
 def load_page_config():
@@ -71,15 +72,13 @@ def render_sidebar():
     if check_api_health():
         st.sidebar.success("API reachable")
     else:
-        st.sidebar.warning("API unreachable — mock data in use")
+        render_warning("API unreachable — mock data in use.", sidebar=True)
 
     st.sidebar.markdown("---")
 
     # Streamlit auto-adds page links when using pages/ folder;
     # this section provides additional context
-    st.sidebar.info(
-        "Select a page from the list above to navigate."
-    )
+    render_empty_state("Select a page from the list above to navigate.", sidebar=True)
 
 
 def main():

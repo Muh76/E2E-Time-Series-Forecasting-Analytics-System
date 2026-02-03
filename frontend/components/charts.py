@@ -10,6 +10,8 @@ from typing import Any
 import plotly.graph_objects as go
 import streamlit as st
 
+from components.ui import render_empty_state
+
 
 def render_time_series_chart(data=None, x_col: str = "date", y_col: str = "value", title: str = ""):
     """
@@ -22,7 +24,7 @@ def render_time_series_chart(data=None, x_col: str = "date", y_col: str = "value
         title: Chart title.
     """
     if data is None or data.empty:
-        st.info("No data available.")
+        render_empty_state("No data available.")
         return
     if title:
         st.subheader(title)
@@ -52,7 +54,7 @@ def render_forecast_vs_actual_plotly(
         title: Chart title.
     """
     if not dates:
-        st.info("No forecast data available.")
+        render_empty_state("No forecast data available.")
         return
     n = len(dates)
     actual = (list(actual) + [None] * n)[:n]
@@ -96,7 +98,7 @@ def render_rolling_metric_chart(
         threshold_label: Legend label for threshold.
     """
     if not dates or not values:
-        st.info(f"No {metric_name} data available.")
+        render_empty_state(f"No {metric_name} data available.")
         return
     fig = go.Figure()
     fig.add_trace(
@@ -136,7 +138,7 @@ def render_drift_bar_chart(
         title: Chart title.
     """
     if not features or not scores:
-        st.info("No drift data available.")
+        render_empty_state("No drift data available.")
         return
     colors = ["#ef4444" if (threshold and s >= threshold) else "#3b82f6" for s in scores]
     fig = go.Figure()
@@ -165,7 +167,7 @@ def render_forecast_chart(actual=None, predicted=None, x_col: str = "date", titl
     Render actual vs predicted time series overlay (legacy; uses Plotly when possible).
     """
     if actual is None and predicted is None:
-        st.info("No forecast data available.")
+        render_empty_state("No forecast data available.")
         return
     # Build unified dates and values for Plotly
     dates: list[str] = []
@@ -187,4 +189,4 @@ def render_forecast_chart(actual=None, predicted=None, x_col: str = "date", titl
     if dates or actual_vals or pred_vals:
         render_forecast_vs_actual_plotly(dates, actual_vals, pred_vals, title=title)
     else:
-        st.info("No forecast data available.")
+        render_empty_state("No forecast data available.")
