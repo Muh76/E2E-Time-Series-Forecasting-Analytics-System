@@ -150,11 +150,73 @@ def _mock_forecasts(
     }
 
 
+def normalize_monitoring_summary(raw_summary: dict[str, Any] | None) -> dict[str, Any]:
+    """
+    Normalize monitoring summary so frontend always receives a consistent shape.
+    - Extracts model_name and model_version from raw_summary["model_info"].
+    - Flattens alerts and thresholds into top-level keys with fallback defaults.
+    - Preserves performance, drift, rolling_series, overall_status.
+    """
+    if not raw_summary:
+        raw_summary = {}
+
+    model_info = raw_summary.get("model_info") or {}
+    model_name = model_info.get("model_name") or raw_summary.get("model_name") or ""
+    model_version = model_info.get("model_version") or raw_summary.get("model_version") or ""
+
+    # Flatten alerts to top-level with defaults
+    alerts = raw_summary.get("alerts")
+    if alerts is None:
+        alerts = (raw_summary.get("monitoring") or {}).get("alerts") or {}
+    if not isinstance(alerts, dict):
+        alerts = {}
+    alerts = {
+        "mae": alerts.get("mae", False),
+        "mape": alerts.get("mape", False),
+        "drift": alerts.get("drift", False),
+    }
+
+    # Flatten thresholds to top-level with defaults
+    thresholds = raw_summary.get("thresholds")
+    if thresholds is None:
+        thresholds = (raw_summary.get("monitoring") or {}).get("thresholds") or {}
+    if not isinstance(thresholds, dict):
+        thresholds = {}
+    thresholds = {
+        "mae_alert": thresholds.get("mae_alert", 15.0),
+        "mape_alert": thresholds.get("mape_alert", 0.20),
+        "drift_threshold": thresholds.get("drift_threshold", 0.25),
+    }
+
+    # Preserve these with fallbacks
+    performance = raw_summary.get("performance") or {}
+    drift = raw_summary.get("drift") or {}
+    rolling_series = raw_summary.get("rolling_series") or {}
+    overall_status = raw_summary.get("overall_status") or raw_summary.get("status") or ""
+
+    # Build normalized summary; preserve other keys (e.g. as_of, pipeline) for compatibility
+    normalized: dict[str, Any] = {
+        "model_name": model_name,
+        "model_version": model_version,
+        "performance": performance,
+        "drift": drift,
+        "rolling_series": rolling_series,
+        "overall_status": overall_status,
+        "alerts": alerts,
+        "thresholds": thresholds,
+    }
+    skip = set(normalized.keys()) | {"model_info", "status"}
+    for k, v in raw_summary.items():
+        if k not in skip:
+            normalized[k] = v
+    return normalized
+
+
 def get_monitoring_summary(
     model_version: str | None = None,
     since: str | None = None,
 ) -> dict[str, Any]:
-    """Fetch monitoring summary. Returns mock data if backend is unavailable."""
+    """Fetch monitoring summary. Returns normalized mock data if backend is unavailable."""
     params: dict[str, str] = {}
     if model_version:
         params["model_version"] = model_version
@@ -165,7 +227,7 @@ def get_monitoring_summary(
     try:
         resp = requests.get(url, params=params or None, timeout=_DEFAULT_TIMEOUT)
         resp.raise_for_status()
-        return resp.json()
+        return normalize_monitoring_summary(resp.json())
     except requests.RequestException as e:
         if _is_backend_unavailable(e):
             logger.warning("Backend unavailable, returning mock monitoring summary: %s", e)
@@ -186,7 +248,7 @@ def _mock_monitoring_summary() -> dict[str, Any]:
         for i in range(6, -1, -1)
     ]
     per_feature = {"lag_1": 0.12, "lag_7": 0.18, "rolling_7": 0.28, "day_of_week": 0.08}
-    return {
+    raw = {
         "model_name": "LightGBM",
         "model_version": "v1.0.0",
         "as_of": now,
@@ -204,6 +266,7 @@ def _mock_monitoring_summary() -> dict[str, Any]:
         "thresholds": {"mae_alert": 15.0, "mape_alert": 0.20, "drift_threshold": 0.25},
         "alerts": {"mae": False, "mape": False, "drift": False},
     }
+    return normalize_monitoring_summary(raw)
 
 
 def copilot_explain(
