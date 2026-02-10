@@ -81,3 +81,57 @@ ETL does **not** guarantee:
 - **Marking:** `augmentation_type` is a string per row. Values include `original` (unchanged), `missing_block`, `noise_shift`, `trend`, or comma-separated combinations when multiple apply. Downstream can filter or weight by these labels.
 - **Determinism:** With fixed config and seed, augmentation is reproducible. Without seed, it is not.
 - **Scope:** Only `target_augmented` is modified; `target` and `target_original` are never overwritten by augmentation.
+
+---
+
+## 9. Rossmann Store Sales — Data Contract
+
+This section defines the data contract for the Rossmann store sales pipeline: source files, join logic, normalized schema, cleaning rules, and output guarantees.
+
+### 9.1 Source files
+
+| File        | Description                    |
+|-------------|--------------------------------|
+| `train.csv` | Historical sales and store-day attributes (e.g. Open, Promo, StateHoliday). |
+| `store.csv` | Store master data (e.g. StoreType, Assortment, CompetitionDistance).     |
+
+### 9.2 Join logic
+
+- **Join:** `train` **LEFT JOIN** `store` on `train.Store` = `store.Store`.
+- All rows from `train` are kept; store attributes are attached where the store key matches. Rows with no matching store get NULLs in store columns (downstream cleaning may drop or fill).
+
+### 9.3 Normalized internal schema (used by all downstream layers)
+
+After join and cleaning, the single internal DataFrame used by ETL and downstream layers has the following columns:
+
+| Column                 | Type      | Notes                                      |
+|------------------------|-----------|--------------------------------------------|
+| `date`                 | datetime  | Daily; observation date.                   |
+| `store_id`             | int       | Store identifier (from `train.Store`).     |
+| `target_raw`           | float     | Original Sales from source.                |
+| `target_cleaned`       | float     | Sales after cleaning rules (see 9.4).     |
+| `open`                 | bool      | Store open (1) or closed (0).              |
+| `promo`                | bool      | Promotion running that day.                |
+| `state_holiday`        | category  | State holiday indicator.                   |
+| `school_holiday`       | bool      | School holiday indicator.                  |
+| `store_type`           | category  | Store type (from store master).            |
+| `assortment`           | category  | Assortment type (from store master).       |
+| `competition_distance` | float     | Distance to competitor; missing filled (see 9.4). |
+
+### 9.4 Cleaning rules
+
+- **Rows with Open == 0:**  
+  - **Choice:** `target_cleaned` is set to **0** (not dropped). Rationale: preserve the (store_id, date) grain for downstream reindex and feature alignment; closed days have no demand, so 0 is the correct cleaned target. Dropping would create date gaps and complicate daily reindex.
+- **Sales == 0 and Open == 0:**  
+  - Not treated as demand; they are closed days. `target_cleaned` = 0.
+- **Missing CompetitionDistance:**  
+  - Filled with the **median** of non-null CompetitionDistance (per store or global, as configured).
+- **Categorical columns:**  
+  - `state_holiday`, `store_type`, and `assortment` are cast explicitly to a categorical dtype (e.g. `pd.Categorical` or string with documented levels).
+
+### 9.5 Output
+
+- **Artifact:** A single DataFrame.
+- **Sort order:** Sorted by `(store_id, date)`.
+- **Uniqueness:** No duplicate `(store_id, date)` keys.
+- **Persistence:** Saved as Parquet to `data/processed/etl_output.parquet`.
