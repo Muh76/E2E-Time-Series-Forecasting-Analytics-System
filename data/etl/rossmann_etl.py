@@ -5,7 +5,11 @@ No file writing, feature engineering, or forecasting logic.
 See docs/DATA_CONTRACT.md §9 for the Rossmann data contract.
 """
 
+import logging
+
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 
 # Required columns for each step (pre-rename names where applicable)
@@ -135,43 +139,70 @@ class RossmannETL:
 
     def clean(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Apply cleaning rules: Open==0 -> target_cleaned=0; fill missing CompetitionDistance with median;
-        cast categorical columns; sort by (store_id, date); ensure no duplicate (store_id, date).
+        Apply cleaning rules: ensure date (daily) and store_id; Open==0 -> target_cleaned=0;
+        drop rows with missing date/store_id; fill missing CompetitionDistance with median;
+        cast bools and categories; remove duplicates; assert monotonic date per store_id.
 
         Args:
-            df: DataFrame from normalize_schema (must have date, store_id, target_cleaned, open, competition_distance, state_holiday, store_type, assortment).
+            df: DataFrame from normalize_schema (must have date, store_id, target_cleaned, open,
+                promo, school_holiday, competition_distance, state_holiday, store_type, assortment).
 
         Returns:
-            Single DataFrame sorted by (store_id, date) with no duplicate (store_id, date).
+            Single DataFrame sorted by (store_id, date), no duplicate (store_id, date),
+            monotonic increasing date per store_id.
 
         Raises:
             ValueError: If required columns are missing.
+            AssertionError: If date is not strictly increasing per store_id after cleaning.
         """
-        required = {"date", "store_id", "target_cleaned", "open", "competition_distance", "state_holiday", "store_type", "assortment"}
+        required = {"date", "store_id", "target_cleaned", "open", "promo", "school_holiday", "competition_distance", "state_holiday", "store_type", "assortment"}
         missing = required - set(df.columns)
         if missing:
             raise ValueError(f"DataFrame missing required columns for cleaning: {sorted(missing)}")
 
         out = df.copy()
+        n_before = len(out)
+        logger.info("Row count before cleaning: %d", n_before)
 
-        # Rows with Open == 0: target_cleaned = 0 (preserve grain; closed days are not demand)
-        out.loc[~out["open"], "target_cleaned"] = 0.0
+        # 1. Convert date to pandas datetime (daily)
+        out["date"] = pd.to_datetime(out["date"]).dt.normalize()
 
-        # Missing CompetitionDistance: fill with median (global)
+        # 2. If Open == 0: set target_cleaned = 0
+        out.loc[~out["open"].astype(bool), "target_cleaned"] = 0.0
+
+        # 3. Drop rows where date or store_id is missing
+        out = out.dropna(subset=["date", "store_id"])
+
+        # 4. Fill missing CompetitionDistance with median (global)
         median_dist = out["competition_distance"].median()
         if pd.isna(median_dist):
             median_dist = 0.0
         out["competition_distance"] = out["competition_distance"].fillna(median_dist).astype(float)
 
-        # Categorical columns cast explicitly
+        # 5. Cast: open, promo, school_holiday -> bool; state_holiday, store_type, assortment -> category
+        for col in ("open", "promo", "school_holiday"):
+            if col in out.columns:
+                out[col] = out[col].astype(bool)
         for col in CATEGORICAL_COLUMNS:
             if col in out.columns:
                 out[col] = out[col].astype("category")
 
-        # Sort by (store_id, date)
+        # 6. Remove duplicates on (store_id, date)
+        out = out.drop_duplicates(subset=["store_id", "date"], keep="first")
+
+        # Sort by (store_id, date) before monotonic check
         out = out.sort_values(["store_id", "date"], ignore_index=True)
 
-        # No duplicate (store_id, date)
-        out = out.drop_duplicates(subset=["store_id", "date"], keep="first")
+        # 7. Assert monotonic increasing date per store_id
+        for store_id, group in out.groupby("store_id", sort=False):
+            dates = group["date"]
+            if not dates.is_monotonic_increasing:
+                raise AssertionError(
+                    f"Dates are not strictly increasing for store_id={store_id}; "
+                    "clean output must have monotonic date per store."
+                )
+
+        n_after = len(out)
+        logger.info("Row count after cleaning: %d", n_after)
 
         return out
