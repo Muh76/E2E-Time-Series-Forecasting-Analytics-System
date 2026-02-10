@@ -1,12 +1,14 @@
-# ETL package: ingest, validate, clean, augment, pipeline.
+# ETL package: ingest, validate, clean, augment, pipeline, Rossmann ETL.
 
 from . import augment, clean, ingest, pipeline, validate
 from .augment import augment_timeseries
 from .clean import clean_retail
+from .rossmann_etl import RossmannETL
 from .validate import REQUIRED_RETAIL_COLUMNS, ValidationResult, validate_retail
 
 __all__ = [
     "REQUIRED_RETAIL_COLUMNS",
+    "RossmannETL",
     "augment",
     "augment_timeseries",
     "clean",
