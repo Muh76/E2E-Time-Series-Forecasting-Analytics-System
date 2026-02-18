@@ -131,6 +131,13 @@ class LightGBMForecast(BaseForecastingModel):
         if len(X_train) == 0:
             raise ValueError("No valid training rows after dropping NaN in features/target.")
 
+        # Convert object dtype columns to category for LightGBM (int, float, bool, category only)
+        obj_cols = [c for c in X_train.columns if X_train[c].dtype == "object"]
+        if obj_cols:
+            logger.info("Converting object columns to category for LightGBM: %s", obj_cols)
+            for c in obj_cols:
+                X_train[c] = X_train[c].astype("category")
+
         lgb_params = {
             "objective": "regression",
             "metric": "mae",
@@ -154,6 +161,10 @@ class LightGBMForecast(BaseForecastingModel):
             X_val = X_val[valid_val]
             y_val = y_val[valid_val]
             if len(X_val) > 0:
+                # Apply same object->category conversion to validation data
+                for c in obj_cols:
+                    if c in X_val.columns:
+                        X_val[c] = X_val[c].astype("category")
                 self._model.fit(
                     X_train, y_train,
                     eval_set=[(X_val, y_val)],
