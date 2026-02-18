@@ -280,11 +280,24 @@ class LightGBMForecast(BaseForecastingModel):
             raw_last = current[self._feature_cols].iloc[[-1]]
             if raw_last.isna().any(axis=1).any():
                 logger.warning(
-                    "NaNs encountered at inference time in features; applying forward-fill (last observation carried forward), then zero fallback for any remaining."
+                    "NaNs encountered at inference time in features; applying forward-fill (last observation carried forward), then numeric fallback for remaining numeric NaNs."
                 )
             X = current[self._feature_cols].ffill().iloc[[-1]]
-            if X.isna().any(axis=1).any():
-                X = X.fillna(0)
+            # Separate numeric vs categorical: do not fill categorical columns with 0 (invalid category)
+            numeric_cols = [
+                c for c in X.columns
+                if pd.api.types.is_numeric_dtype(X[c]) or X[c].dtype == bool
+            ]
+            if numeric_cols and X[numeric_cols].isna().any(axis=1).any():
+                num_nans = X[numeric_cols].isna().sum().sum()
+                if num_nans > 0:
+                    logger.info(
+                        "Numeric fallback: filling %d remaining NaN(s) with 0 in numeric columns: %s",
+                        num_nans, numeric_cols,
+                    )
+                    X = X.copy()
+                    X[numeric_cols] = X[numeric_cols].fillna(0)
+            # Categorical columns: leave any remaining NaN as-is (LightGBM handles missing category)
             y_pred = float(self._model.predict(X)[0])
             forecast_date = last_date + freq * h
             if hasattr(forecast_date, "normalize"):
