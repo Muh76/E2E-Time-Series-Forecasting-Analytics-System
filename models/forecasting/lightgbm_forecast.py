@@ -79,6 +79,7 @@ class LightGBMForecast(BaseForecastingModel):
         self._entity_col: str | None = None
         self._feature_cols: list[str] = []
         self._cat_cols: list[str] = []
+        self._category_levels: dict[str, Any] = {}
         self._frequency: Any = "D"
         self._model: Any = None
         self._fitted: bool = False
@@ -138,6 +139,11 @@ class LightGBMForecast(BaseForecastingModel):
             for c in obj_cols:
                 X_train[c] = X_train[c].astype("category")
 
+        # Store category levels for each categorical column (exact training categories)
+        for c in self._cat_cols:
+            if c in X_train.columns:
+                self._category_levels[c] = X_train[c].astype("category").cat.categories.tolist()
+
         lgb_params = {
             "objective": "regression",
             "metric": "mae",
@@ -161,10 +167,13 @@ class LightGBMForecast(BaseForecastingModel):
             X_val = X_val[valid_val]
             y_val = y_val[valid_val]
             if len(X_val) > 0:
-                # Apply same object->category conversion to validation data
+                # Apply same object->category conversion and align categories with training
                 for c in obj_cols:
                     if c in X_val.columns:
                         X_val[c] = X_val[c].astype("category")
+                for col in self._category_levels:
+                    if col in X_val.columns:
+                        X_val[col] = X_val[col].astype("category").cat.set_categories(self._category_levels[col])
                 self._model.fit(
                     X_train, y_train,
                     eval_set=[(X_val, y_val)],
@@ -282,7 +291,11 @@ class LightGBMForecast(BaseForecastingModel):
                 logger.warning(
                     "NaNs encountered at inference time in features; applying forward-fill (last observation carried forward), then numeric fallback for remaining numeric NaNs."
                 )
-            X = current[self._feature_cols].ffill().iloc[[-1]]
+            X = current[self._feature_cols].ffill().iloc[[-1]].copy()
+            # Align categorical columns with training categories (before any fillna)
+            for col in self._category_levels:
+                if col in X.columns:
+                    X[col] = X[col].astype("category").cat.set_categories(self._category_levels[col])
             # Separate numeric vs categorical: do not fill categorical columns with 0 (invalid category)
             numeric_cols = [
                 c for c in X.columns
