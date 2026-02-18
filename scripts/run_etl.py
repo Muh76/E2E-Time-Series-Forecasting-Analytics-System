@@ -78,9 +78,9 @@ def main() -> None:
     parser.add_argument(
         "--pipeline-mode",
         type=str,
-        choices=("generic", "retail"),
+        choices=("generic", "retail", "rossmann"),
         default="retail",
-        help="Pipeline mode: retail (date, store_id, target) or generic.",
+        help="Pipeline mode: retail (date, store_id, target), rossmann (train+store.csv), or generic.",
     )
     parser.add_argument(
         "--no-validate",
@@ -101,15 +101,21 @@ def main() -> None:
     raw_dir = PROJECT_ROOT / data_cfg.get("raw_path", "data/raw")
     processed_dir = PROJECT_ROOT / data_cfg.get("processed_path", "data/processed")
 
-    raw_file = args.raw_file or raw_dir / "target.csv"
+    if args.pipeline_mode == "rossmann":
+        raw_file = raw_dir / "rossmann"
+    else:
+        raw_file = args.raw_file or raw_dir / "target.csv"
     if not raw_file.is_absolute():
         raw_file = PROJECT_ROOT / raw_file
     output_file = args.output_file or processed_dir / "etl_output.parquet"
     if not output_file.is_absolute():
         output_file = PROJECT_ROOT / output_file
 
+    ingest_cfg = {"path": str(raw_file), **config.get("ingest", {})}
+    if args.pipeline_mode == "rossmann":
+        ingest_cfg["rossmann_dir"] = str(raw_file)
     pipeline_config = {
-        "ingest": {"path": str(raw_file), **config.get("ingest", {})},
+        "ingest": ingest_cfg,
         "validate": config.get("validate", {}),
         "clean": config.get("clean", {}),
         "augment": config.get("augment", {}),
