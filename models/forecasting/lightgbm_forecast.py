@@ -295,7 +295,7 @@ class LightGBMForecast(BaseForecastingModel):
             # Separate numeric vs categorical: do not fill categorical columns with 0 (invalid category)
             numeric_cols = [
                 c for c in X.columns
-                if pd.api.types.is_numeric_dtype(X[c]) or X[c].dtype == bool
+                if pd.api.types.is_numeric_dtype(X[c])
             ]
             if numeric_cols and X[numeric_cols].isna().any(axis=1).any():
                 num_nans = X[numeric_cols].isna().sum().sum()
@@ -320,6 +320,7 @@ class LightGBMForecast(BaseForecastingModel):
                 last_row[self._target_col] = y_pred
                 extended = pd.concat([current, pd.DataFrame([last_row])], ignore_index=True)
                 featured = run_pipeline(extended, config)
+                featured = featured.loc[:, ~featured.columns.duplicated()]
                 current = featured
 
         return result
