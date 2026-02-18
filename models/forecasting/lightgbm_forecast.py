@@ -277,12 +277,8 @@ class LightGBMForecast(BaseForecastingModel):
                 pass
 
         result: list[dict[str, Any]] = []
-        # Base series for recursive: date, entity, target_cleaned only (minimal for pipeline)
-        base_cols = [self._date_col, self._target_col]
-        if self._entity_col and self._entity_col in group.columns:
-            base_cols.append(self._entity_col)
+        original_cols = group.columns.tolist()
         current = group.copy()
-        entity_val = current[self._entity_col].iloc[0] if self._entity_col and self._entity_col in current.columns else None
 
         for h in range(1, horizon + 1):
             # Last row's features (may have been updated by pipeline in previous step)
@@ -318,11 +314,11 @@ class LightGBMForecast(BaseForecastingModel):
             result.append({"date": forecast_date, "y_pred": y_pred})
 
             if h < horizon and run_pipeline is not None:
-                # Extend series with prediction (base cols only); re-run feature pipeline
-                new_row = {self._date_col: forecast_date, self._target_col: y_pred}
-                if self._entity_col and entity_val is not None:
-                    new_row[self._entity_col] = entity_val
-                extended = pd.concat([current[base_cols], pd.DataFrame([new_row])], ignore_index=True)
+                # Extend with full row (preserve static features); re-run feature pipeline
+                last_row = current.iloc[-1].copy()
+                last_row[self._date_col] = forecast_date
+                last_row[self._target_col] = y_pred
+                extended = pd.concat([current, pd.DataFrame([last_row])], ignore_index=True)
                 featured = run_pipeline(extended, config)
                 current = featured
 
