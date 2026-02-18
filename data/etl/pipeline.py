@@ -13,6 +13,7 @@ from typing import Any
 import pandas as pd
 
 from . import augment, clean, ingest, validate
+from .rossmann_etl import RossmannETL
 
 logger = logging.getLogger(__name__)
 
@@ -47,9 +48,9 @@ def run_pipeline(
         run_validation: If True, fail on validation errors (default True).
         run_augment: If True, run augment step. If False, skip. If None, use
             config["augment"]["enabled"] or config["augment_timeseries"] enable.
-        pipeline_mode: "generic" (default) or "retail". Retail uses
-            load_retail_sales_csv, validate_retail, clean_retail, and
-            optionally augment_timeseries.
+        pipeline_mode: "generic" (default), "retail", or "rossmann". Retail uses
+            load_retail_sales_csv, validate_retail, clean_retail. Rossmann uses
+            RossmannETL with data/raw/rossmann/train.csv and store.csv.
 
     Returns:
         Final processed DataFrame after all steps.
@@ -59,13 +60,41 @@ def run_pipeline(
         ValueError: If run_validation is True and validation fails.
     """
     cfg = config or {}
-    ingest_cfg = cfg.get("ingest")
+    ingest_cfg = cfg.get("ingest") or {}
     validate_cfg = cfg.get("validate")
     clean_cfg = cfg.get("clean")
     augment_cfg = cfg.get("augment")
 
-    # 1. Ingest
-    path = (ingest_cfg or {}).get("path") or raw_path
+    # Rossmann mode: load train + store, merge, normalize, clean. Skip validate/augment.
+    if pipeline_mode == "rossmann":
+        base = Path(ingest_cfg.get("rossmann_dir", raw_path)).resolve()
+        if base.is_file():
+            base = base.parent
+        train_path = base / "train.csv"
+        store_path = base / "store.csv"
+        missing = []
+        if not train_path.exists():
+            missing.append(str(train_path))
+        if not store_path.exists():
+            missing.append(str(store_path))
+        if missing:
+            raise FileNotFoundError(
+                f"Rossmann pipeline: required files not found: {', '.join(missing)}. "
+                "Expected data/raw/rossmann/train.csv and data/raw/rossmann/store.csv."
+            )
+        logger.info("ETL step: rossmann ingest (train=%s, store=%s)", train_path, store_path)
+        etl = RossmannETL()
+        train_df = etl.load_train(str(train_path))
+        store_df = etl.load_store(str(store_path))
+        merged = etl.merge(train_df, store_df)
+        df = etl.normalize_schema(merged)
+        df = etl.clean(df)
+        logger.info("ETL step: rossmann done (rows=%d)", len(df))
+        logger.info("ETL pipeline complete")
+        return df
+
+    # 1. Ingest (generic / retail)
+    path = ingest_cfg.get("path") or raw_path
     logger.info("ETL step: ingest (path=%s)", path)
     if pipeline_mode == "retail":
         df = ingest.load_retail_sales_csv(path=path, config=ingest_cfg)
