@@ -61,7 +61,7 @@ def main() -> None:
         "--raw-file",
         type=Path,
         default=None,
-        help="Path to raw CSV (default: data/raw/target.csv from config).",
+        help="Path to raw CSV (default: data/raw/target.csv). Ignored when --pipeline-mode rossmann.",
     )
     parser.add_argument(
         "--output-file",
@@ -102,7 +102,7 @@ def main() -> None:
     processed_dir = PROJECT_ROOT / data_cfg.get("processed_path", "data/processed")
 
     if args.pipeline_mode == "rossmann":
-        raw_file = raw_dir / "rossmann"
+        raw_file = raw_dir / "rossmann"  # Ignore --raw-file; use fixed paths
     else:
         raw_file = args.raw_file or raw_dir / "target.csv"
     if not raw_file.is_absolute():
@@ -138,25 +138,41 @@ def main() -> None:
     df.to_parquet(output_file, index=False)
     logger.info("Saved processed data to %s", output_file)
 
-    # Summary statistics: row count and date range
-    date_col = (
-        (pipeline_config.get("validate") or {}).get("date_column")
-        or (pipeline_config.get("clean") or {}).get("date_column")
-        or "date"
-    )
-    if date_col in df.columns:
-        dates = pd.to_datetime(df[date_col], errors="coerce").dropna()
+    # Summary statistics
+    if args.pipeline_mode == "rossmann":
+        date_col = "date"
+        store_col = "store_id"
+        dates = pd.to_datetime(df[date_col], errors="coerce").dropna() if date_col in df.columns else pd.Series(dtype="datetime64[ns]")
+        n_stores = df[store_col].nunique() if store_col in df.columns else 0
         if len(dates) > 0:
             logger.info(
-                "Summary: rows=%d, date_min=%s, date_max=%s",
+                "Summary: dataset=rossmann, rows=%d, date_min=%s, date_max=%s, stores=%d",
                 len(df),
                 dates.min(),
                 dates.max(),
+                n_stores,
             )
         else:
-            logger.info("Summary: rows=%d", len(df))
+            logger.info("Summary: dataset=rossmann, rows=%d, stores=%d", len(df), n_stores)
     else:
-        logger.info("Summary: rows=%d", len(df))
+        date_col = (
+            (pipeline_config.get("validate") or {}).get("date_column")
+            or (pipeline_config.get("clean") or {}).get("date_column")
+            or "date"
+        )
+        if date_col in df.columns:
+            dates = pd.to_datetime(df[date_col], errors="coerce").dropna()
+            if len(dates) > 0:
+                logger.info(
+                    "Summary: rows=%d, date_min=%s, date_max=%s",
+                    len(df),
+                    dates.min(),
+                    dates.max(),
+                )
+            else:
+                logger.info("Summary: rows=%d", len(df))
+        else:
+            logger.info("Summary: rows=%d", len(df))
 
 
 if __name__ == "__main__":
