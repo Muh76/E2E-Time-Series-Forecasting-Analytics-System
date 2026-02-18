@@ -80,7 +80,7 @@ def test_target_cleaned_zero_when_open_zero(train_df: pd.DataFrame, store_df: pd
     normalized = etl.normalize_schema(merged)
     cleaned = etl.clean(normalized)
 
-    closed_rows = cleaned[~cleaned["open"]]
+    closed_rows = cleaned[cleaned["open"] == 0]
     assert len(closed_rows) >= 1, "Fixture has at least one row with Open==0"
     assert (closed_rows["target_cleaned"] == 0.0).all()
 

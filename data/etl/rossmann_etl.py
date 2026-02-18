@@ -205,4 +205,26 @@ class RossmannETL:
         n_after = len(out)
         logger.info("Row count after cleaning: %d", n_after)
 
+        # 8. Enforce explicit schema for deterministic Parquet serialization
+        out = self._enforce_schema(out)
+
+        return out
+
+    def _enforce_schema(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Enforce explicit dtypes on output columns. No pandas inference.
+        Ensures Parquet serialization is deterministic and safe.
+        """
+        out = df.copy()
+
+        # Numeric: explicit types (no inference)
+        out["store_id"] = out["store_id"].astype("int64")
+        out["open"] = out["open"].astype("int64")  # 0/1
+        out["promo"] = out["promo"].astype("int64")  # 0/1
+        out["target_raw"] = out["target_raw"].astype("float64")
+        out["target_cleaned"] = out["target_cleaned"].astype("float64")
+
+        # state_holiday: string (not category) for stable serialization
+        out["state_holiday"] = out["state_holiday"].astype(str)
+
         return out
