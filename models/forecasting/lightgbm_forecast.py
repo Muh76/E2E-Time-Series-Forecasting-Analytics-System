@@ -17,17 +17,30 @@ from .base import BaseForecastingModel
 logger = logging.getLogger(__name__)
 MODEL_NAME = "lightgbm"
 
+# Columns that must NEVER be used as model features regardless of what is in the DataFrame.
+# target_raw is the un-cleaned sales value — essentially the same signal as target_cleaned,
+# causing severe data leakage (confirmed gain 1000× higher than any lag feature).
+_NEVER_FEATURE_COLS: frozenset[str] = frozenset({
+    "target_raw",   # raw sales before cleaning — leaks target signal
+})
+
 
 def _get_feature_columns(
     df: pd.DataFrame,
     date_col: str,
     target_col: str,
     entity_col: str | None,
+    extra_exclude: set[str] | None = None,
 ) -> list[str]:
-    """Columns to use as features: all except date, target, and identifiers not used as features."""
-    exclude = {date_col, target_col}
+    """
+    Return model feature columns: all df columns except date, target, entity,
+    columns in _NEVER_FEATURE_COLS, and any caller-specified extra_exclude.
+    """
+    exclude = {date_col, target_col} | _NEVER_FEATURE_COLS
     if entity_col:
         exclude.add(entity_col)
+    if extra_exclude:
+        exclude |= extra_exclude
     return [c for c in df.columns if c not in exclude]
 
 
@@ -116,6 +129,21 @@ class LightGBMForecast(BaseForecastingModel):
         )
         if not self._feature_cols:
             raise ValueError("No feature columns found; need lags, rolling, or calendar features.")
+
+        # --- Defensive leakage guard ---
+        leaky = [c for c in self._feature_cols if c in _NEVER_FEATURE_COLS]
+        if leaky:
+            raise ValueError(
+                f"Leakage detected: the following column(s) must never be used as features "
+                f"but are present in feature_cols: {leaky}. "
+                "This indicates a bug in _get_feature_columns() or an unsafe DataFrame was passed."
+            )
+
+        # Log final feature set for full transparency
+        logger.info(
+            "Feature columns (%d): %s", len(self._feature_cols), self._feature_cols
+        )
+
         self._cat_cols = [c for c in self._feature_cols if c == self._entity_col or train_df[c].dtype == "object" or train_df[c].dtype.name == "category"]
 
         train_sub, val_sub = _time_aware_split(train_df, self._date_col, val_frac)
