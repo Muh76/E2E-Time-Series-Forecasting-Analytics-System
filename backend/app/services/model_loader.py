@@ -8,6 +8,7 @@ are populated by the startup event; lazy loading is not used in production.
 Expected artifact paths:
     <project_root>/artifacts/models/primary_lightgbm.joblib
     <project_root>/artifacts/models/baseline_seasonal_naive.joblib
+    <project_root>/artifacts/models/feature_columns.json
     <project_root>/artifacts/models/metrics.json
 """
 
@@ -25,6 +26,7 @@ _ARTIFACTS_DIR = _PROJECT_ROOT / "artifacts" / "models"
 
 _primary_model: Any = None
 _baseline_model: Any = None
+_feature_columns: list[str] | None = None
 _metrics: dict[str, Any] | None = None
 
 
@@ -64,6 +66,33 @@ def load_baseline_model() -> Any:
     _baseline_model = joblib.load(artifact_path)
     logger.info("Baseline model loaded successfully from %s", artifact_path)
     return _baseline_model
+
+
+def load_feature_columns() -> list[str]:
+    """
+    Load the ordered feature column list from artifacts/models/feature_columns.json.
+
+    This file is written by scripts/train.py from primary._feature_cols, so it
+    reflects the exact columns and order the model was trained on. Loading at
+    startup allows the inference layer to enforce strict column alignment.
+
+    Raises:
+        RuntimeError: If the artifact file does not exist.
+    """
+    global _feature_columns
+    artifact_path = _ARTIFACTS_DIR / "feature_columns.json"
+    if not artifact_path.exists():
+        raise RuntimeError(
+            f"Feature columns artifact not found: {artifact_path}. "
+            "Run training (scripts/train.py) to generate it."
+        )
+    with artifact_path.open() as f:
+        _feature_columns = json.load(f)
+    logger.info(
+        "Feature columns loaded successfully (%d columns) from %s",
+        len(_feature_columns), artifact_path,
+    )
+    return _feature_columns
 
 
 def get_primary_model() -> Any:

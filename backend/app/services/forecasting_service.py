@@ -1,46 +1,130 @@
 """
 Inference service for store-level sales forecasting.
 
-Loads the processed dataset from disk, filters to the requested store,
-and calls the supplied model to produce horizon-step forecasts.
-The model must be passed explicitly (preloaded at application startup);
-this service does not perform lazy model loading.
+Loads the processed dataset from disk, applies the same feature engineering
+pipeline used during training, and calls the supplied model to produce
+horizon-step forecasts.
+
+Feature engineering is always run at inference time to ensure lag, rolling,
+and calendar features match the schema the model was trained on.
+No data leakage: features are computed from historical data only.
+The model is passed explicitly (preloaded at application startup).
 """
 
 import logging
+import sys
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import yaml
 
 logger = logging.getLogger(__name__)
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _PARQUET_PATH = _PROJECT_ROOT / "data" / "processed" / "etl_output.parquet"
+_CONFIG_PATH = _PROJECT_ROOT / "config" / "base" / "default.yaml"
+
+# Ensure project root is on sys.path so data.feature_engineering is importable
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
 
 # Minimum rows required for reliable feature computation
 # (covers the longest lag/rolling window: 14 days + a small buffer)
 _MIN_HISTORY_ROWS = 15
 
+# Cached inference config (loaded once, matches training config)
+_inference_config: dict[str, Any] | None = None
 
-def forecast_store(store_id: int, horizon: int, model: Any) -> list[dict[str, Any]]:
+
+def _get_inference_config() -> dict[str, Any]:
+    """
+    Load and cache the base YAML config used during training.
+
+    The feature_engineering section drives lag/rolling/calendar parameters;
+    loading the same config at inference ensures feature consistency with training.
+    """
+    global _inference_config
+    if _inference_config is None:
+        if not _CONFIG_PATH.exists():
+            raise RuntimeError(
+                f"Base config not found: {_CONFIG_PATH}. "
+                "Ensure config/base/default.yaml exists."
+            )
+        with _CONFIG_PATH.open() as f:
+            _inference_config = yaml.safe_load(f) or {}
+        logger.info("Inference config loaded from %s", _CONFIG_PATH)
+    return _inference_config
+
+
+def _run_feature_pipeline(df: pd.DataFrame, config: dict[str, Any]) -> pd.DataFrame:
+    """
+    Apply lag, rolling, and calendar feature engineering to the input DataFrame.
+
+    Imports from data.feature_engineering (project-root package). The project
+    root is added to sys.path at module load time to ensure importability.
+    """
+    from data.feature_engineering import run_feature_pipeline  # noqa: PLC0415
+    return run_feature_pipeline(df, config)
+
+
+def _enforce_feature_columns(
+    df: pd.DataFrame,
+    feature_columns: list[str],
+) -> pd.DataFrame:
+    """
+    Validate that all expected feature columns are present in df and return
+    df with columns reordered to exactly match the training order.
+
+    Raises:
+        ValueError: If any expected feature column is missing from df,
+                    listing all missing columns clearly.
+    """
+    missing = [c for c in feature_columns if c not in df.columns]
+    if missing:
+        raise ValueError(
+            f"Feature mismatch: {len(missing)} column(s) expected by the model "
+            f"are missing after feature engineering.\n"
+            f"Missing columns: {missing}\n"
+            f"Available columns: {sorted(df.columns.tolist())}\n"
+            "Ensure the feature pipeline config matches the config used during training."
+        )
+    # Return a view with columns in exact training order (extra columns are silently excluded)
+    return df[feature_columns]
+
+
+def forecast_store(store_id: int, horizon: int, model: Any, feature_columns: list[str]) -> list[dict[str, Any]]:
     """
     Generate a horizon-step sales forecast for a single store.
 
-    Loads the processed parquet dataset, filters to `store_id`, and calls
-    model.predict() using the preloaded model passed in from app.state.
+    Steps:
+      1. Load processed parquet and filter to store_id.
+      2. Apply the same feature engineering pipeline used during training
+         (lag, rolling, calendar) so the feature schema matches what the model
+         was trained on.
+      3. Enforce strict column alignment: validate that all columns in
+         feature_columns are present and reorder to the exact training order.
+         Raises ValueError with a clear message if any column is missing.
+      4. Call model.predict() with the aligned DataFrame and config (config
+         enables recursive multi-step to re-run the pipeline per step).
+      5. Return a list of {"date": str, "forecast": float} dicts.
+
+    No data leakage: all features at time t are computed from data at t or earlier.
 
     Args:
-        store_id: Integer store identifier matching the `store_id` column.
-        horizon:  Number of future steps to forecast (must be >= 1).
-        model:    Fitted forecasting model (preloaded at startup via app.state).
+        store_id:        Integer store identifier matching the `store_id` column.
+        horizon:         Number of future steps to forecast (must be >= 1).
+        model:           Fitted forecasting model (preloaded at startup via app.state).
+        feature_columns: Ordered list of feature column names from training
+                         (loaded from artifacts/models/feature_columns.json).
 
     Returns:
         List of {"date": str, "forecast": float} dicts in chronological order.
 
     Raises:
-        ValueError: If horizon < 1, store_id not found, or insufficient history.
-        RuntimeError: If the processed dataset is missing.
+        ValueError: If horizon < 1, store_id not found, insufficient history,
+                    or feature column mismatch detected.
+        RuntimeError: If the processed dataset or config is missing.
     """
     if horizon < 1:
         raise ValueError(f"horizon must be >= 1, got {horizon}.")
@@ -70,7 +154,25 @@ def forecast_store(store_id: int, horizon: int, model: Any) -> list[dict[str, An
             f"at least {_MIN_HISTORY_ROWS} required for reliable feature computation."
         )
 
-    predictions: pd.DataFrame = model.predict(store_df, horizon)
+    # Load config (same as used during training) and run feature pipeline
+    config = _get_inference_config()
+    logger.info(
+        "Running feature pipeline for store_id=%d (%d rows)", store_id, len(store_df)
+    )
+    featured_df = _run_feature_pipeline(store_df, config)
+
+    # Enforce strict column alignment: validate presence and reorder to training order
+    logger.info(
+        "Enforcing feature column alignment: expecting %d columns", len(feature_columns)
+    )
+    aligned_df = _enforce_feature_columns(featured_df, feature_columns)
+    logger.info("Feature column alignment verified for store_id=%d", store_id)
+
+    # Pass config so model.predict() can re-run feature pipeline for recursive
+    # multi-step forecasting (horizon > 1). The full featured_df (not aligned_df)
+    # is passed so the model has access to date, target, and entity columns needed
+    # for recursive extension; the model internally selects self._feature_cols.
+    predictions: pd.DataFrame = model.predict(featured_df, horizon, config)
 
     result = [
         {"date": str(row["date"])[:10], "forecast": float(row["y_pred"])}
