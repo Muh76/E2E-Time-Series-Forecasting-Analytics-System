@@ -1,10 +1,10 @@
 # FastAPI main
 from fastapi import FastAPI
 
-from app.api.v1.chat import router as chat_router
-from app.api.v1.copilot import router as copilot_router
-from app.api.v1.forecast import router as forecast_router
-from app.api.v1.monitoring import router as monitoring_router
+from backend.app.api.v1.chat import router as chat_router
+from backend.app.api.v1.copilot import router as copilot_router
+from backend.app.api.v1.forecast import router as forecast_router
+from backend.app.api.v1.monitoring import router as monitoring_router
 
 app = FastAPI(title="E2E Time Series Forecasting API")
 
