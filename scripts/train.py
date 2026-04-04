@@ -243,6 +243,13 @@ def main() -> None:
     joblib.dump(primary, primary_path)
     logger.info("Saved primary model: %s", primary_path)
 
+    feature_columns_path = models_dir / "feature_columns.json"
+    with open(feature_columns_path, "w") as f:
+        json.dump(primary._feature_cols, f, indent=2)
+    logger.info(
+        "Saved feature columns (%d): %s", len(primary._feature_cols), feature_columns_path
+    )
+
     if metrics_log:
         metrics_path = models_dir / "metrics.json"
         with open(metrics_path, "w") as f:

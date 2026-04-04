@@ -34,9 +34,10 @@ async def post_forecast_store(request: Request, body: ForecastRequest) -> Foreca
     Returns a list of {date, forecast} dicts in chronological order.
     """
     model = request.app.state.primary_model
+    feature_columns = request.app.state.feature_columns
 
     try:
-        forecasts = forecast_store(body.store_id, body.horizon, model)
+        forecasts = forecast_store(body.store_id, body.horizon, model, feature_columns)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except RuntimeError as exc:
