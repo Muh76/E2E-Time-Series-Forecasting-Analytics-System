@@ -202,6 +202,31 @@ def main() -> None:
     primary.fit(train_df, train_config)
     logger.info("Primary (LightGBM) fitted")
 
+    # --- Post-fit leakage and consistency checks ---
+    if "target_raw" in primary._feature_cols:
+        raise ValueError(
+            "Leakage detected post-fit: 'target_raw' is in feature_cols. "
+            "Aborting before saving any artifact."
+        )
+    logger.info(
+        "Leakage check passed: 'target_raw' is NOT in feature_cols (%d features).",
+        len(primary._feature_cols),
+    )
+    lgb_feature_names = list(primary._model.feature_name_)
+    if lgb_feature_names != primary._feature_cols:
+        logger.error(
+            "feature_name_ MISMATCH with _feature_cols!\n"
+            "  _feature_cols  (%d): %s\n"
+            "  feature_name_  (%d): %s",
+            len(primary._feature_cols), primary._feature_cols,
+            len(lgb_feature_names), lgb_feature_names,
+        )
+        raise ValueError("model.feature_name_ does not match _feature_cols — aborting.")
+    logger.info(
+        "Verified: model.feature_name_ matches _feature_cols exactly (%d features).",
+        len(lgb_feature_names),
+    )
+
     # Evaluate on validation
     metrics_log: dict[str, dict[str, float]] = {}
     if not val_df.empty:
