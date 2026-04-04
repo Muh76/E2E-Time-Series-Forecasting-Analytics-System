@@ -239,88 +239,141 @@ class LightGBMForecast(BaseForecastingModel):
         config: dict[str, Any],
     ) -> list[dict[str, Any]]:
         """
-        Predict for one series using recursive multi-step forecasting.
+        True recursive autoregressive multi-step forecasting for one entity series.
 
-        **Recursive multi-step strategy:**
-        Future target values are unknown at prediction time, so they are replaced
-        by the model's own predictions. For step h=1 we use the last observed row's
-        features and predict y_1. For step h+1 we need features at the next date;
-        those features (e.g. lags, rolling stats) depend on the target at the
-        previous step. We therefore append the predicted value from step h to the
-        series, re-run the feature pipeline to compute features for the new row,
-        then predict step h+1 from that row. So features for step h+1 are computed
-        using the predicted value from step h (and earlier predictions), not true
-        future targets.
+        **Algorithm (per step h = 1 … horizon):**
+          1. Append a placeholder row at the forecast date (target = NaN) to the
+             working base series (date + target + static store features only).
+          2. Re-run the feature pipeline on the last `lookback + 2` rows of the
+             extended series so lag_*, rolling_*, and calendar features are freshly
+             computed from actual or previously predicted targets — not stale values.
+          3. Read the last row's features, enforce column order and category levels.
+          4. Fill any remaining numeric NaNs with 0 (categorical: left as NaN for LightGBM).
+          5. Call model.predict() for y_pred.
+          6. Replace the placeholder's target with y_pred, append to the working
+             series, and trim to `lookback + buffer` rows (performance guard).
 
-        **Error accumulation:** Because each step conditions on prior predictions
-        rather than true values, errors can accumulate over longer horizons:
-        early over- or under-predictions affect lags and rolling features for
-        later steps, which can amplify bias or variance further out.
+        **Why this avoids the constant-prediction bug:**
+          The working series (`current_base`) holds only *base* columns (no stale
+          lag/rolling columns). Engineered features are fully recomputed each step
+          from the updated target history, so lag_1 correctly reflects the previous
+          prediction after the first step.
 
-        **Why this strategy is acceptable:** Recursive (autoregressive) multi-step
-        forecasting is standard in production: it requires only one trained model,
-        avoids training separate models per horizon, and matches the setting where
-        future targets are never available at inference time. Alternatives (e.g.
-        direct multi-step or true multi-output models) have different trade-offs;
-        recursive remains the default for many time-series and ML forecasting
-        systems.
+        **Performance optimisation:**
+          The feature pipeline is re-run on a tail of `lookback + 2` rows rather
+          than the full historical series. `lookback = max(max_lag, max_window)`
+          (default: 14 days), so the tail is always small regardless of series length.
+
+        **No data leakage:**
+          The placeholder row carries NaN as target; lag features for this row are
+          computed from rows at t-1, t-7, t-14 — all of which are observed history
+          or prior predictions, never future actuals.
+
+        **Error accumulation:**
+          Each step conditions on prior predictions rather than true values; errors
+          can propagate through lags and rolling features over longer horizons.
+          Recursive autoregressive forecasting is standard production practice and
+          is the appropriate default for the current system.
         """
         group = group.sort_values(self._date_col).reset_index(drop=True)
         last_date = group[self._date_col].iloc[-1]
-        fe_config = config.get("feature_engineering")
+
+        # Load feature pipeline for recursive recomputation
+        fe_config = config.get("feature_engineering") or {}
         run_pipeline = None
-        if horizon > 1 and fe_config:
+        if fe_config:
             try:
-                from data.feature_engineering import run_feature_pipeline
+                from data.feature_engineering import run_feature_pipeline  # noqa: PLC0415
                 run_pipeline = run_feature_pipeline
             except ImportError:
-                pass
+                logger.warning("data.feature_engineering not importable; recursive features disabled.")
+
+        # Determine lookback: largest lag or rolling window drives how many rows are needed
+        lags: list[int] = list((fe_config.get("lag") or {}).get("lags", [1, 7, 14]))
+        windows: list[int] = list((fe_config.get("rolling") or {}).get("windows", [7, 14]))
+        lookback: int = max(max(lags, default=14), max(windows, default=14))
+        _BUFFER = 5                            # extra rows as safety margin
+        keep_rows = lookback + _BUFFER
+
+        # Identify engineered columns by naming convention so they are excluded from
+        # the working base series (they must be recomputed fresh each step).
+        _calendar_feature_names = {"day_of_week", "day_of_month", "week_of_year", "month", "is_weekend"}
+        _engineered = {
+            c for c in group.columns
+            if c.startswith("lag_") or c.startswith("rolling_") or c in _calendar_feature_names
+        }
+        base_cols = [c for c in group.columns if c not in _engineered]
+
+        # Working base series: only pre-pipeline columns; trimmed to `keep_rows`
+        current_base = group[base_cols].tail(keep_rows).reset_index(drop=True)
 
         result: list[dict[str, Any]] = []
-        original_cols = group.columns.tolist()
-        current = group.copy()
 
         for h in range(1, horizon + 1):
-            # Last row's features (may have been updated by pipeline in previous step)
-            raw_last = current[self._feature_cols].iloc[[-1]]
-            if raw_last.isna().any(axis=1).any():
-                logger.warning(
-                    "NaNs encountered at inference time in features; applying forward-fill (last observation carried forward), then numeric fallback for remaining numeric NaNs."
-                )
-            X = current[self._feature_cols].ffill().iloc[[-1]].copy()
-            # Align categorical columns with training categories (before any fillna)
-            for col in self._category_levels:
-                if col in X.columns:
-                    X[col] = X[col].astype("category").cat.set_categories(self._category_levels[col])
-            # Separate numeric vs categorical: do not fill categorical columns with 0 (invalid category)
-            numeric_cols = [
-                c for c in X.columns
-                if pd.api.types.is_numeric_dtype(X[c])
-            ]
-            if numeric_cols and X[numeric_cols].isna().any(axis=1).any():
-                num_nans = X[numeric_cols].isna().sum().sum()
-                if num_nans > 0:
-                    logger.info(
-                        "Numeric fallback: filling %d remaining NaN(s) with 0 in numeric columns: %s",
-                        num_nans, numeric_cols,
-                    )
-                    X = X.copy()
-                    X[numeric_cols] = X[numeric_cols].fillna(0)
-            # Categorical columns: leave any remaining NaN as-is (LightGBM handles missing category)
-            y_pred = float(self._model.predict(X)[0])
             forecast_date = last_date + freq * h
             if hasattr(forecast_date, "normalize"):
                 forecast_date = forecast_date.normalize()
-            result.append({"date": forecast_date, "y_pred": y_pred})
 
-            if h < horizon and run_pipeline is not None:
-                # Extend with full row (preserve static features); re-run feature pipeline
-                last_row = current.iloc[-1].copy()
-                last_row[self._date_col] = forecast_date
-                last_row[self._target_col] = y_pred
-                extended = pd.concat([current, pd.DataFrame([last_row])], ignore_index=True)
-                featured = run_pipeline(extended, config)
+            if run_pipeline is not None:
+                # --- Step 1: extend with NaN-target placeholder for forecast_date ---
+                placeholder = current_base.iloc[-1].copy()
+                placeholder[self._date_col] = forecast_date
+                placeholder[self._target_col] = float("nan")
+                extended = pd.concat(
+                    [current_base, pd.DataFrame([placeholder])], ignore_index=True
+                )
+
+                # --- Step 2: recompute features on a trimmed tail (performance) ---
+                tail = extended.tail(lookback + 2)
+                featured = run_pipeline(tail, config)
+                # Drop any duplicate columns produced by re-running pipeline
                 featured = featured.loc[:, ~featured.columns.duplicated()]
-                current = featured
+
+                # --- Step 3: build X in strict training column order ---
+                missing_fc = [c for c in self._feature_cols if c not in featured.columns]
+                if missing_fc:
+                    logger.warning(
+                        "Step h=%d: %d feature column(s) absent after pipeline recompute "
+                        "(will be NaN, then filled): %s", h, len(missing_fc), missing_fc,
+                    )
+                X = featured.iloc[[-1]].reindex(columns=self._feature_cols).copy()
+            else:
+                # No pipeline: use stale last row (horizon > 1 will repeat predictions)
+                logger.warning(
+                    "Feature pipeline unavailable; step h=%d uses last observed features. "
+                    "Recursive forecasting requires feature_engineering in config.", h,
+                )
+                X = group.reindex(columns=self._feature_cols).ffill().iloc[[-1]].copy()
+
+            # --- Step 4: category alignment then NaN filling ---
+            for col in self._category_levels:
+                if col in X.columns:
+                    X[col] = X[col].astype("category").cat.set_categories(
+                        self._category_levels[col]
+                    )
+            numeric_cols = [c for c in X.columns if pd.api.types.is_numeric_dtype(X[c])]
+            nan_count = int(X[numeric_cols].isna().sum().sum()) if numeric_cols else 0
+            if nan_count > 0:
+                logger.info(
+                    "Step h=%d: filling %d numeric NaN(s) with 0.", h, nan_count,
+                )
+                X[numeric_cols] = X[numeric_cols].fillna(0)
+            # Categorical NaNs left as-is: LightGBM handles missing categories natively
+
+            # --- Step 5: predict ---
+            y_pred = float(self._model.predict(X)[0])
+            result.append({"date": forecast_date, "y_pred": y_pred})
+            logger.debug("Step h=%d: date=%s, y_pred=%.4f", h, forecast_date, y_pred)
+
+            # --- Step 6: append prediction to base series for next step ---
+            predicted_row = current_base.iloc[-1].copy()
+            predicted_row[self._date_col] = forecast_date
+            predicted_row[self._target_col] = y_pred
+            current_base = pd.concat(
+                [current_base, pd.DataFrame([predicted_row])], ignore_index=True
+            )
+            # Trim to keep memory and pipeline cost bounded
+            if len(current_base) > keep_rows + 1:
+                current_base = current_base.iloc[-(keep_rows + 1):].reset_index(drop=True)
 
         return result
