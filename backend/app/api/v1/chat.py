@@ -9,7 +9,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
-from app.services.rag_service import (
+from backend.app.services.rag_service import (
     FAISS_INDEX_PATH,
     CHUNK_METADATA_PATH,
     get_faiss_and_metadata,

@@ -7,7 +7,7 @@ No database; no background jobs; in-memory or stubbed service.
 
 from fastapi import APIRouter
 
-from app.services.monitoring_service import get_monitoring_summary
+from backend.app.services.monitoring_service import get_monitoring_summary
 
 router = APIRouter(prefix="/monitoring", tags=["monitoring"])
 

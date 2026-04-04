@@ -8,7 +8,7 @@ Inference only; no retraining.
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from app.services.forecasting_service import forecast_store
+from backend.app.services.forecasting_service import forecast_store
 
 router = APIRouter(prefix="/forecast", tags=["forecast"])
 
