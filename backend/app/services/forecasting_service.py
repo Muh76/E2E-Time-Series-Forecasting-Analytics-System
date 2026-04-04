@@ -2,8 +2,9 @@
 Inference service for store-level sales forecasting.
 
 Loads the processed dataset from disk, filters to the requested store,
-and calls the trained LightGBM model to produce horizon-step forecasts.
-Does not retrain the model or modify the feature pipeline.
+and calls the supplied model to produce horizon-step forecasts.
+The model must be passed explicitly (preloaded at application startup);
+this service does not perform lazy model loading.
 """
 
 import logging
@@ -12,36 +13,34 @@ from typing import Any
 
 import pandas as pd
 
-from .model_loader import get_primary_model
-
 logger = logging.getLogger(__name__)
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _PARQUET_PATH = _PROJECT_ROOT / "data" / "processed" / "etl_output.parquet"
 
-# Minimum number of rows required for meaningful feature computation
+# Minimum rows required for reliable feature computation
 # (covers the longest lag/rolling window: 14 days + a small buffer)
 _MIN_HISTORY_ROWS = 15
 
 
-def forecast_store(store_id: int, horizon: int) -> list[dict[str, Any]]:
+def forecast_store(store_id: int, horizon: int, model: Any) -> list[dict[str, Any]]:
     """
     Generate a horizon-step sales forecast for a single store.
 
-    Loads the processed parquet dataset, filters to `store_id`, runs the
-    trained LightGBM model's predict() method, and returns the forecast as
-    a list of dicts.
+    Loads the processed parquet dataset, filters to `store_id`, and calls
+    model.predict() using the preloaded model passed in from app.state.
 
     Args:
         store_id: Integer store identifier matching the `store_id` column.
         horizon:  Number of future steps to forecast (must be >= 1).
+        model:    Fitted forecasting model (preloaded at startup via app.state).
 
     Returns:
         List of {"date": str, "forecast": float} dicts in chronological order.
 
     Raises:
         ValueError: If horizon < 1, store_id not found, or insufficient history.
-        RuntimeError: If the model artifact is missing (propagated from model_loader).
+        RuntimeError: If the processed dataset is missing.
     """
     if horizon < 1:
         raise ValueError(f"horizon must be >= 1, got {horizon}.")
@@ -71,7 +70,6 @@ def forecast_store(store_id: int, horizon: int) -> list[dict[str, Any]]:
             f"at least {_MIN_HISTORY_ROWS} required for reliable feature computation."
         )
 
-    model = get_primary_model()
     predictions: pd.DataFrame = model.predict(store_df, horizon)
 
     result = [
