@@ -1,7 +1,9 @@
 # FastAPI main
 import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
 from backend.app.api.v1.backtest import router as backtest_router
 from backend.app.api.v1.chat import router as chat_router
@@ -14,6 +16,25 @@ from backend.app.services.model_loader import load_baseline_model, load_feature_
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="E2E Time Series Forecasting API")
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    """Return structured 422 errors with per-field messages."""
+    errors = []
+    for err in exc.errors():
+        loc = err.get("loc", ())
+        field = ".".join(str(part) for part in loc if part != "body")
+        errors.append({
+            "field": field or "unknown",
+            "message": err.get("msg", "Validation error"),
+            "type": err.get("type", "value_error"),
+            "input": err.get("input"),
+        })
+    logger.warning("Request validation failed: %s", errors)
+    return JSONResponse(status_code=422, content={"detail": errors})
 
 
 @app.on_event("startup")

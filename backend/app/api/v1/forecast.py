@@ -10,8 +10,9 @@ Inference only; no retraining.
 import logging
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
+from backend.app.api.v1.validators import HORIZON_MAX, HORIZON_MIN, get_valid_store_ids
 from backend.app.services.forecasting_service import forecast_store, get_store_last_date
 from backend.app.services.model_loader import get_model_metadata
 
@@ -21,8 +22,24 @@ router = APIRouter(prefix="/forecast", tags=["forecast"])
 
 
 class ForecastRequest(BaseModel):
-    store_id: int = Field(..., description="Store identifier")
-    horizon: int = Field(..., ge=1, description="Number of steps to forecast")
+    store_id: int = Field(..., description="Store identifier (must exist in dataset)")
+    horizon: int = Field(
+        ...,
+        ge=HORIZON_MIN,
+        le=HORIZON_MAX,
+        description=f"Number of steps to forecast ({HORIZON_MIN}–{HORIZON_MAX})",
+    )
+
+    @field_validator("store_id")
+    @classmethod
+    def store_must_exist(cls, v: int) -> int:
+        valid = get_valid_store_ids()
+        if valid and v not in valid:
+            raise ValueError(
+                f"store_id={v} does not exist in the dataset. "
+                f"Valid range: {min(valid)}–{max(valid)} ({len(valid)} stores)."
+            )
+        return v
 
 
 class ForecastResponse(BaseModel):

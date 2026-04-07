@@ -20,6 +20,7 @@ import argparse
 import json
 import logging
 import os
+import random
 import re
 import sys
 from datetime import datetime, timezone
@@ -31,6 +32,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 import joblib
+import numpy as np
 import pandas as pd
 import yaml
 
@@ -139,6 +141,12 @@ def main() -> None:
     env = args.env or os.environ.get("APP_ENV")
     config = load_config(env)
     logger.info("Config loaded (env=%s)", env)
+
+    # Fix all random seeds for full reproducibility
+    SEED = 42
+    random.seed(SEED)
+    np.random.seed(SEED)
+    logger.info("Training seeds fixed to %d for reproducibility", SEED)
 
     # Paths
     data_cfg = config.get("data") or {}
@@ -316,8 +324,6 @@ def main() -> None:
     train_end = str(train_dates.max())[:10]
 
     # Training-set residuals (in-sample fit quality)
-    import numpy as np  # noqa: PLC0415
-
     X_train_all = train_df[primary._feature_cols].copy()
     y_train_all = train_df[target_col]
     valid = X_train_all.notna().all(axis=1) & y_train_all.notna()
