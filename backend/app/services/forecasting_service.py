@@ -68,6 +68,32 @@ def _run_feature_pipeline(df: pd.DataFrame, config: dict[str, Any]) -> pd.DataFr
     return run_feature_pipeline(df, config)
 
 
+def get_store_last_date(store_id: int) -> str:
+    """
+    Return the last observed date (YYYY-MM-DD) for a store in the processed dataset.
+
+    Validates store_id exists and the dataset is loadable.
+
+    Raises:
+        ValueError: If store_id not found or dataset missing required columns.
+        RuntimeError: If processed parquet does not exist.
+    """
+    if not _PARQUET_PATH.exists():
+        raise RuntimeError(
+            f"Processed dataset not found: {_PARQUET_PATH}. "
+            "Run the ETL pipeline (scripts/run_etl.py) to generate it."
+        )
+
+    df = pd.read_parquet(_PARQUET_PATH, columns=["store_id", "date"])
+
+    store_df = df[df["store_id"] == store_id]
+    if store_df.empty:
+        raise ValueError(f"store_id={store_id} not found in dataset.")
+
+    last_date = store_df["date"].max()
+    return str(last_date)[:10]
+
+
 def _enforce_feature_columns(
     df: pd.DataFrame,
     feature_columns: list[str],

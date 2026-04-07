@@ -125,6 +125,25 @@ def get_baseline_model() -> Any:
     return _baseline_model
 
 
+def get_model_metadata() -> dict[str, Any]:
+    """
+    Load and return model metadata from artifacts/models/model_metadata.json.
+
+    Raises:
+        RuntimeError: If the metadata artifact does not exist.
+    """
+    metadata_path = _ARTIFACTS_DIR / "model_metadata.json"
+    if not metadata_path.exists():
+        raise RuntimeError(
+            f"Model metadata not found: {metadata_path}. "
+            "Run training (scripts/train.py) to generate it."
+        )
+    with metadata_path.open() as f:
+        metadata = json.load(f)
+    logger.info("Model metadata loaded from %s", metadata_path)
+    return metadata
+
+
 def get_metrics() -> dict[str, Any]:
     """
     Return evaluation metrics, loading from disk on first call.
