@@ -49,6 +49,24 @@ async def post_forecast_store(request: Request, body: ForecastRequest) -> Foreca
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
+    # Add 95% confidence interval using residual_std from training metadata
+    try:
+        metadata = get_model_metadata()
+        residual_std = float(metadata.get("residual_std", 0))
+    except (RuntimeError, TypeError, ValueError):
+        residual_std = 0.0
+
+    if residual_std > 0:
+        z = 1.96
+        for f in forecasts:
+            point = f["forecast"]
+            f["confidence_low"] = round(point - z * residual_std, 2)
+            f["confidence_high"] = round(point + z * residual_std, 2)
+    else:
+        for f in forecasts:
+            f["confidence_low"] = None
+            f["confidence_high"] = None
+
     return ForecastResponse(
         store_id=body.store_id,
         horizon=body.horizon,
