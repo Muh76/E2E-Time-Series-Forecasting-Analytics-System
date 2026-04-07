@@ -3,6 +3,7 @@ import logging
 
 from fastapi import FastAPI
 
+from backend.app.api.v1.backtest import router as backtest_router
 from backend.app.api.v1.chat import router as chat_router
 from backend.app.api.v1.copilot import router as copilot_router
 from backend.app.api.v1.forecast import router as forecast_router
@@ -30,6 +31,7 @@ def health_live() -> dict:
     return {"status": "ok"}
 
 
+app.include_router(backtest_router, prefix="/api/v1")
 app.include_router(chat_router, prefix="/api/v1")
 app.include_router(copilot_router, prefix="/api/v1")
 app.include_router(forecast_router, prefix="/api/v1")
