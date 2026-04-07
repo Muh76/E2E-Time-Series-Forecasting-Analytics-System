@@ -8,6 +8,7 @@ Inference only; no retraining.
 """
 
 import logging
+import time
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
@@ -59,19 +60,27 @@ async def post_forecast_store(request: Request, body: ForecastRequest) -> Foreca
     model = request.app.state.primary_model
     feature_columns = request.app.state.feature_columns
 
+    t_start = time.perf_counter()
     try:
         forecasts = forecast_store(body.store_id, body.horizon, model, feature_columns)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    latency_ms = round((time.perf_counter() - t_start) * 1000, 1)
 
-    # Add 95% confidence interval using residual_std from training metadata
     try:
         metadata = get_model_metadata()
         residual_std = float(metadata.get("residual_std", 0))
+        model_version = metadata.get("model_version", "unknown")
     except (RuntimeError, TypeError, ValueError):
         residual_std = 0.0
+        model_version = "unknown"
+
+    logger.info(
+        "Forecast completed: store_id=%d, horizon=%d, latency_ms=%.1f, model_version=%s",
+        body.store_id, body.horizon, latency_ms, model_version,
+    )
 
     if residual_std > 0:
         z = 1.96
