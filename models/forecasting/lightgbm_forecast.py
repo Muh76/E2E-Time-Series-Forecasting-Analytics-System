@@ -177,6 +177,7 @@ class LightGBMForecast(BaseForecastingModel):
             "metric": "mae",
             "verbosity": -1,
             "random_state": seed,
+            "deterministic": True,
             "force_col_wise": True,
             "n_estimators": int(cfg.get("n_estimators", 100)),
             "learning_rate": float(cfg.get("learning_rate", 0.05)),

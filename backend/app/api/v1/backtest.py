@@ -9,8 +9,15 @@ Uses the primary model preloaded at startup (app.state.primary_model).
 import logging
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
+from backend.app.api.v1.validators import (
+    HORIZON_MAX,
+    HORIZON_MIN,
+    N_SPLITS_MAX,
+    N_SPLITS_MIN,
+    get_valid_store_ids,
+)
 from backend.app.services.backtest_service import backtest_store
 
 logger = logging.getLogger(__name__)
@@ -19,9 +26,30 @@ router = APIRouter(prefix="/backtest", tags=["backtest"])
 
 
 class BacktestRequest(BaseModel):
-    store_id: int = Field(..., description="Store identifier")
-    horizon: int = Field(..., ge=1, description="Forecast horizon per split")
-    n_splits: int = Field(..., ge=1, le=20, description="Number of rolling-origin splits")
+    store_id: int = Field(..., description="Store identifier (must exist in dataset)")
+    horizon: int = Field(
+        ...,
+        ge=HORIZON_MIN,
+        le=HORIZON_MAX,
+        description=f"Forecast horizon per split ({HORIZON_MIN}–{HORIZON_MAX})",
+    )
+    n_splits: int = Field(
+        ...,
+        ge=N_SPLITS_MIN,
+        le=N_SPLITS_MAX,
+        description=f"Number of rolling-origin splits ({N_SPLITS_MIN}–{N_SPLITS_MAX})",
+    )
+
+    @field_validator("store_id")
+    @classmethod
+    def store_must_exist(cls, v: int) -> int:
+        valid = get_valid_store_ids()
+        if valid and v not in valid:
+            raise ValueError(
+                f"store_id={v} does not exist in the dataset. "
+                f"Valid range: {min(valid)}–{max(valid)} ({len(valid)} stores)."
+            )
+        return v
 
 
 class SplitMetrics(BaseModel):
