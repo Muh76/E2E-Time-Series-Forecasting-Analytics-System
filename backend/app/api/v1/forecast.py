@@ -2,14 +2,20 @@
 Forecast API: store-level sales forecasting.
 
 POST /forecast/store returns horizon-step forecasts for a given store_id.
+POST /forecast/store/debug returns debug metadata without running inference.
 Uses the primary model preloaded at startup (app.state.primary_model).
 Inference only; no retraining.
 """
 
+import logging
+
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from backend.app.services.forecasting_service import forecast_store
+from backend.app.services.forecasting_service import forecast_store, get_store_last_date
+from backend.app.services.model_loader import get_model_metadata
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/forecast", tags=["forecast"])
 
@@ -48,3 +54,41 @@ async def post_forecast_store(request: Request, body: ForecastRequest) -> Foreca
         horizon=body.horizon,
         forecasts=forecasts,
     )
+
+
+@router.post("/store/debug")
+async def post_forecast_store_debug(body: ForecastRequest) -> dict:
+    """
+    Debug endpoint: return forecast metadata for a store without running inference.
+
+    Validates the store exists and returns model version, feature columns,
+    lookback window, and the last observed date for the requested store.
+    """
+    try:
+        last_date = get_store_last_date(body.store_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    try:
+        metadata = get_model_metadata()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    result = {
+        "store_id": body.store_id,
+        "last_observed_date": last_date,
+        "model_version": metadata.get("model_version"),
+        "feature_columns_used": metadata.get("feature_columns"),
+        "max_lag_used": metadata.get("max_lag"),
+        "lookback_window": metadata.get("lookback_window"),
+        "recursive_steps": body.horizon,
+    }
+
+    logger.info(
+        "Debug forecast info: store_id=%d, last_date=%s, horizon=%d",
+        body.store_id, last_date, body.horizon,
+    )
+
+    return result
