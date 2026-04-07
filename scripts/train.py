@@ -20,7 +20,9 @@ import argparse
 import json
 import logging
 import os
+import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Project root = parent of scripts/
@@ -280,6 +282,81 @@ def main() -> None:
         with open(metrics_path, "w") as f:
             json.dump(metrics_log, f, indent=2)
         logger.info("Saved metrics: %s", metrics_path)
+
+    # ---- Model metadata ----
+    metadata_path = models_dir / "model_metadata.json"
+
+    # Auto-increment version
+    prev_version = 0
+    if metadata_path.exists():
+        try:
+            with metadata_path.open() as f:
+                prev_meta = json.load(f)
+            match = re.search(r"(\d+)$", str(prev_meta.get("model_version", "v0")))
+            prev_version = int(match.group(1)) if match else 0
+        except (json.JSONDecodeError, KeyError):
+            prev_version = 0
+    model_version = f"v{prev_version + 1}"
+
+    # Infer max_lag from feature column names (lag_N)
+    lag_values = []
+    for c in primary._feature_cols:
+        m = re.match(r"^lag_(\d+)$", c)
+        if m:
+            lag_values.append(int(m.group(1)))
+    max_lag = max(lag_values) if lag_values else 0
+
+    # Lookback window from config
+    rolling_windows = list((fe_cfg.get("rolling") or {}).get("windows", [7, 14]))
+    lookback_window = max(max_lag, max(rolling_windows, default=0))
+
+    # Train date range
+    train_dates = train_df[date_col].dropna()
+    train_start = str(train_dates.min())[:10]
+    train_end = str(train_dates.max())[:10]
+
+    # Training-set residuals (in-sample fit quality)
+    import numpy as np  # noqa: PLC0415
+
+    X_train_all = train_df[primary._feature_cols].copy()
+    y_train_all = train_df[target_col]
+    valid = X_train_all.notna().all(axis=1) & y_train_all.notna()
+    X_fit = X_train_all.loc[valid]
+    y_fit = y_train_all.loc[valid]
+    # Convert object columns to category (same as fit)
+    for c in X_fit.columns:
+        if X_fit[c].dtype == "object":
+            X_fit[c] = X_fit[c].astype("category")
+    for c in primary._category_levels:
+        if c in X_fit.columns:
+            X_fit[c] = X_fit[c].astype("category").cat.set_categories(
+                primary._category_levels[c]
+            )
+    y_hat_train = primary._model.predict(X_fit)
+    residuals = np.array(y_fit) - np.array(y_hat_train)
+    train_mae = float(np.mean(np.abs(residuals)))
+    train_rmse = float(np.sqrt(np.mean(residuals ** 2)))
+    residual_std = float(np.std(residuals))
+
+    metadata = {
+        "model_version": model_version,
+        "trained_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "feature_count": len(primary._feature_cols),
+        "feature_columns": primary._feature_cols,
+        "max_lag": max_lag,
+        "lookback_window": lookback_window,
+        "train_start": train_start,
+        "train_end": train_end,
+        "train_rows": int(len(X_fit)),
+        "train_rmse": round(train_rmse, 4),
+        "train_mae": round(train_mae, 4),
+        "residual_std": round(residual_std, 4),
+    }
+
+    with metadata_path.open("w") as f:
+        json.dump(metadata, f, indent=2)
+    logger.info("Saved model metadata: %s", metadata_path)
+    logger.info("Model metadata: %s", json.dumps(metadata, indent=2))
 
     logger.info("Training complete. Artifacts in %s", models_dir)
 
