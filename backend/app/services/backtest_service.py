@@ -17,6 +17,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from backend.app.services.model_loader import get_model_metadata
+
 from .forecasting_service import (
     _PARQUET_PATH,
     _MIN_HISTORY_ROWS,
@@ -74,11 +76,20 @@ def backtest_store(
         raise ValueError(f"store_id={store_id} not found in dataset.")
 
     store_df = store_df.sort_values("date").reset_index(drop=True)
-    if len(store_df) < _MIN_HISTORY_ROWS + horizon:
+
+    try:
+        metadata = get_model_metadata()
+        max_lag = int(metadata.get("max_lag", 0))
+    except (RuntimeError, TypeError, ValueError):
+        max_lag = 0
+    min_required = max(max_lag, _MIN_HISTORY_ROWS) + horizon
+
+    if len(store_df) < min_required:
         raise ValueError(
-            f"store_id={store_id} has only {len(store_df)} rows; "
-            f"need at least {_MIN_HISTORY_ROWS + horizon} for backtesting "
-            f"(min_history={_MIN_HISTORY_ROWS} + horizon={horizon})."
+            f"Insufficient history for backtesting. "
+            f"store_id={store_id} has {len(store_df)} observations; "
+            f"required minimum {min_required} observations "
+            f"(max_lag={max_lag} + horizon={horizon})."
         )
 
     config = _get_inference_config()

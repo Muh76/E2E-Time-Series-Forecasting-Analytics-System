@@ -19,6 +19,8 @@ from typing import Any
 import pandas as pd
 import yaml
 
+from backend.app.services.model_loader import get_model_metadata
+
 logger = logging.getLogger(__name__)
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -174,10 +176,19 @@ def forecast_store(store_id: int, horizon: int, model: Any, feature_columns: lis
 
     store_df = store_df.sort_values("date").reset_index(drop=True)
 
-    if len(store_df) < _MIN_HISTORY_ROWS:
+    try:
+        metadata = get_model_metadata()
+        max_lag = int(metadata.get("max_lag", 0))
+    except (RuntimeError, TypeError, ValueError):
+        max_lag = 0
+    min_required = max(max_lag, _MIN_HISTORY_ROWS)
+
+    if len(store_df) < min_required:
         raise ValueError(
-            f"store_id={store_id} has only {len(store_df)} rows of history; "
-            f"at least {_MIN_HISTORY_ROWS} required for reliable feature computation."
+            f"Insufficient history for forecasting. "
+            f"store_id={store_id} has {len(store_df)} observations; "
+            f"required minimum {min_required} observations "
+            f"(max_lag={max_lag})."
         )
 
     # Load config (same as used during training) and run feature pipeline
