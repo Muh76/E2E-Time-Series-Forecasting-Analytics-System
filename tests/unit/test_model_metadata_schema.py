@@ -31,6 +31,12 @@ VALID_METADATA: dict = {
     },
     "residual_std": 576.34,
     "validation_metrics": {"rmse": 620.12, "mae": 410.55, "mape": 14.32},
+    "feature_importance": [
+        {"feature": "lag_1", "importance": 0.45},
+        {"feature": "rolling_mean_7", "importance": 0.30},
+        {"feature": "day_of_week", "importance": 0.15},
+        {"feature": "lag_7", "importance": 0.10},
+    ],
     "max_lag": 14,
     "lookback_window": 14,
 }
@@ -119,3 +125,40 @@ class TestModelMetadataSchema:
         data["training_date_range"] = {"start": "2013-01-01"}
         with pytest.raises(ValidationError):
             ModelMetadataResponse(**data)
+
+    def test_feature_importance_non_empty(self):
+        m = ModelMetadataResponse(**VALID_METADATA)
+        assert len(m.feature_importance) > 0
+
+    def test_feature_importance_sorted_descending(self):
+        m = ModelMetadataResponse(**VALID_METADATA)
+        values = [item.importance for item in m.feature_importance]
+        assert values == sorted(values, reverse=True)
+
+    def test_feature_importance_items_have_name_and_value(self):
+        m = ModelMetadataResponse(**VALID_METADATA)
+        for item in m.feature_importance:
+            assert isinstance(item.feature, str)
+            assert len(item.feature) > 0
+            assert item.importance >= 0
+
+    def test_feature_importance_defaults_to_empty(self):
+        data = copy.deepcopy(VALID_METADATA)
+        del data["feature_importance"]
+        m = ModelMetadataResponse(**data)
+        assert m.feature_importance == []
+
+    def test_feature_importance_negative_value_fails(self):
+        data = copy.deepcopy(VALID_METADATA)
+        data["feature_importance"] = [{"feature": "lag_1", "importance": -0.5}]
+        with pytest.raises(ValidationError):
+            ModelMetadataResponse(**data)
+
+    def test_feature_importance_max_15_items(self):
+        data = copy.deepcopy(VALID_METADATA)
+        data["feature_importance"] = [
+            {"feature": f"feat_{i}", "importance": round(1.0 / (i + 1), 4)}
+            for i in range(15)
+        ]
+        m = ModelMetadataResponse(**data)
+        assert len(m.feature_importance) == 15

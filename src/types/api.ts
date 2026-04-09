@@ -92,6 +92,11 @@ export interface ValidationMetrics {
   mape: number | null;
 }
 
+export interface FeatureImportanceItem {
+  feature: string;
+  importance: number;
+}
+
 export interface ModelMetadata {
   model_version: string;
   trained_at: string;
@@ -102,6 +107,7 @@ export interface ModelMetadata {
   hyperparameters: Record<string, unknown>;
   residual_std: number;
   validation_metrics: ValidationMetrics;
+  feature_importance: FeatureImportanceItem[];
   max_lag: number;
   lookback_window: number;
 }
