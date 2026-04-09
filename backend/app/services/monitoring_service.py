@@ -3,10 +3,16 @@ In-memory monitoring state service.
 
 Holds latest performance and drift outputs; returns monitoring summary in
 API contract format. No database; no background jobs.
+
+The monitoring state is updated automatically after each successful backtest
+via ``update_monitoring_from_backtest``.
 """
 
+import logging
 from datetime import datetime, timezone
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # In-memory store: last computed monitoring state (or None for stubbed)
 _monitoring_state: dict[str, Any] | None = None
@@ -41,6 +47,74 @@ def set_monitoring_state(summary: dict[str, Any]) -> None:
     """Store computed monitoring summary (from build_monitoring_summary)."""
     global _monitoring_state
     _monitoring_state = summary
+
+
+def update_monitoring_from_backtest(
+    backtest_result: dict[str, Any],
+    model_metadata: dict[str, Any] | None = None,
+) -> None:
+    """
+    Persist backtest average metrics into the monitoring state.
+
+    Called after a successful backtest so that ``GET /api/v1/monitoring/summary``
+    reflects real model performance instead of returning the stub.
+
+    Args:
+        backtest_result: The dict returned by ``backtest_store()`` — must
+            contain an ``average`` key with ``rmse``, ``mae``, ``mape``.
+        model_metadata: Optional model metadata dict (from ``get_model_metadata()``).
+            Used to populate ``model_info.version``.
+    """
+    avg = backtest_result.get("average") or {}
+    n_splits = backtest_result.get("n_splits", 0)
+    store_id = backtest_result.get("store_id")
+    horizon = backtest_result.get("horizon")
+
+    version = "unknown"
+    if model_metadata:
+        version = model_metadata.get("model_version", "unknown")
+
+    total_samples = 0
+    for s in backtest_result.get("splits", []):
+        total_samples += s.get("horizon", 0)
+
+    state = {
+        "model_info": {
+            "model_name": "lightgbm",
+            "version": version,
+        },
+        "performance": {
+            "current_metrics": {
+                "mae": avg.get("mae", 0.0),
+                "rmse": avg.get("rmse", 0.0),
+                "mape": avg.get("mape", 0.0),
+            },
+            "evaluated_points": total_samples,
+            "backtest": {
+                "store_id": store_id,
+                "horizon": horizon,
+                "n_splits": n_splits,
+                "avg_rmse": avg.get("rmse", 0.0),
+                "avg_mae": avg.get("mae", 0.0),
+                "avg_mape": avg.get("mape", 0.0),
+            },
+        },
+        "drift": {
+            "drift_detected": False,
+            "overall_score": 0.0,
+            "threshold": 1.0,
+            "per_feature_scores": {},
+        },
+        "overall_status": "healthy",
+    }
+
+    set_monitoring_state(state)
+    logger.info(
+        "Monitoring state updated from backtest: store_id=%s, n_splits=%d, "
+        "avg_rmse=%.4f, avg_mae=%.4f, avg_mape=%.2f%%",
+        store_id, n_splits,
+        avg.get("rmse", 0.0), avg.get("mae", 0.0), avg.get("mape", 0.0),
+    )
 
 
 def get_monitoring_summary() -> dict[str, Any]:
