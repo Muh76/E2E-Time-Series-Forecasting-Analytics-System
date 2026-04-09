@@ -23,6 +23,11 @@ class ValidationMetrics(BaseModel):
     mape: float | None = None
 
 
+class FeatureImportanceItem(BaseModel):
+    feature: str
+    importance: float = Field(ge=0)
+
+
 class ModelMetadataResponse(BaseModel):
     model_version: str
     trained_at: str
@@ -33,5 +38,6 @@ class ModelMetadataResponse(BaseModel):
     hyperparameters: dict[str, Any]
     residual_std: float = Field(ge=0)
     validation_metrics: ValidationMetrics
+    feature_importance: list[FeatureImportanceItem] = Field(default_factory=list)
     max_lag: int = Field(ge=0)
     lookback_window: int = Field(ge=0)

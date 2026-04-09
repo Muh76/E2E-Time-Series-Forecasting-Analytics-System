@@ -379,6 +379,35 @@ def main() -> None:
     else:
         validation_metrics = {"rmse": None, "mae": None, "mape": None}
 
+    # Feature importance (tree-based or linear models)
+    feature_importance: list[dict[str, object]] = []
+    inner = primary._model
+    try:
+        if hasattr(inner, "feature_importances_"):
+            raw = inner.feature_importances_
+        elif hasattr(inner, "coef_"):
+            raw = np.abs(inner.coef_)
+        else:
+            raw = None
+
+        if raw is not None and len(raw) == len(primary._feature_cols):
+            pairs = sorted(
+                zip(primary._feature_cols, raw.tolist()),
+                key=lambda x: x[1],
+                reverse=True,
+            )
+            feature_importance = [
+                {"feature": name, "importance": round(float(val), 6)}
+                for name, val in pairs[:15]
+            ]
+            logger.info(
+                "Extracted top %d feature importances (max=%.4f)",
+                len(feature_importance),
+                feature_importance[0]["importance"] if feature_importance else 0,
+            )
+    except Exception as exc:
+        logger.warning("Could not extract feature importance: %s", exc)
+
     metadata = {
         "model_version": model_version,
         "trained_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -389,6 +418,7 @@ def main() -> None:
         "hyperparameters": hyperparameters,
         "residual_std": round(residual_std, 4),
         "validation_metrics": validation_metrics,
+        "feature_importance": feature_importance,
         "max_lag": max_lag,
         "lookback_window": lookback_window,
     }
