@@ -357,19 +357,40 @@ def main() -> None:
             residual_std,
         )
 
+    # Hyperparameters actually used by the fitted LGBMRegressor
+    hyperparameters = {
+        "n_estimators": primary._model.n_estimators,
+        "learning_rate": primary._model.learning_rate,
+        "num_leaves": primary._model.num_leaves,
+        "random_state": primary._model.random_state,
+        "objective": "regression",
+        "metric": "mae",
+        "deterministic": True,
+    }
+
+    # Validation metrics (out-of-sample); null when no validation set
+    if metrics_log.get("primary_lightgbm"):
+        pm = metrics_log["primary_lightgbm"]
+        validation_metrics: dict[str, float | None] = {
+            "rmse": round(float(pm["rmse"]), 4),
+            "mae": round(float(pm["mae"]), 4),
+            "mape": round(float(pm["mape"]), 2),
+        }
+    else:
+        validation_metrics = {"rmse": None, "mae": None, "mape": None}
+
     metadata = {
         "model_version": model_version,
         "trained_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "feature_count": len(primary._feature_cols),
+        "training_date_range": {"start": train_start, "end": train_end},
         "feature_columns": primary._feature_cols,
+        "feature_count": len(primary._feature_cols),
+        "sample_size": int(len(X_fit)),
+        "hyperparameters": hyperparameters,
+        "residual_std": round(residual_std, 4),
+        "validation_metrics": validation_metrics,
         "max_lag": max_lag,
         "lookback_window": lookback_window,
-        "train_start": train_start,
-        "train_end": train_end,
-        "train_rows": int(len(X_fit)),
-        "train_rmse": round(train_rmse, 4),
-        "train_mae": round(train_mae, 4),
-        "residual_std": round(residual_std, 4),
     }
 
     with metadata_path.open("w") as f:

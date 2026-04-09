@@ -19,13 +19,16 @@ export default function ModelInfoPanel() {
     return <div className="model-info-panel">Loading model info…</div>;
   }
 
+  const vm = meta.validation_metrics;
+
   return (
     <div className="model-info-panel">
       <span><strong>Model</strong> {meta.model_version}</span>
       <span><strong>Features</strong> {meta.feature_count}</span>
-      <span><strong>Train</strong> {meta.train_start} → {meta.train_end}</span>
-      <span><strong>RMSE</strong> {meta.train_rmse.toFixed(2)}</span>
-      <span><strong>MAE</strong> {meta.train_mae.toFixed(2)}</span>
+      <span><strong>Samples</strong> {meta.sample_size.toLocaleString()}</span>
+      <span><strong>Train</strong> {meta.training_date_range.start} → {meta.training_date_range.end}</span>
+      {vm.rmse != null && <span><strong>RMSE</strong> {vm.rmse.toFixed(2)}</span>}
+      {vm.mae != null && <span><strong>MAE</strong> {vm.mae.toFixed(2)}</span>}
     </div>
   );
 }
