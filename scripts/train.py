@@ -26,19 +26,19 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-# Project root = parent of scripts/
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
 import joblib
 import numpy as np
 import pandas as pd
 import yaml
 
-from data.feature_engineering import run_feature_pipeline
-from models.evaluation import compute_metrics
-from models.forecasting import LightGBMForecast, SeasonalNaiveForecast
+# Project root = parent of scripts/
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from data.feature_engineering import run_feature_pipeline  # noqa: E402
+from models.evaluation import compute_metrics  # noqa: E402
+from models.forecasting import LightGBMForecast, SeasonalNaiveForecast  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -95,7 +95,7 @@ def align_forecasts_to_actuals(
     target_col: str,
     entity_col: str | None,
 ) -> tuple[list[float], list[float], list[object]]:
-    """Merge forecast (entity_id, date, y_pred) with actuals (entity, date, target). Return y_true, y_pred, entity_ids."""
+    """Merge forecast with actuals on entity+date. Return y_true, y_pred, entity_ids."""
     if entity_col and "entity_id" in forecasts.columns and entity_col in actuals.columns:
         merged = forecasts.merge(
             actuals[[entity_col, date_col, target_col]],
@@ -253,8 +253,10 @@ def main() -> None:
             pred_primary, val_df, date_col, target_col, entity_col
         )
 
-        metrics_baseline = compute_metrics(y_true_b, y_pred_b, entity_ids=eids_b if eids_b and eids_b[0] is not None else None)
-        metrics_primary = compute_metrics(y_true_p, y_pred_p, entity_ids=eids_p if eids_p and eids_p[0] is not None else None)
+        eids_b_arg = eids_b if eids_b and eids_b[0] is not None else None
+        eids_p_arg = eids_p if eids_p and eids_p[0] is not None else None
+        metrics_baseline = compute_metrics(y_true_b, y_pred_b, entity_ids=eids_b_arg)
+        metrics_primary = compute_metrics(y_true_p, y_pred_p, entity_ids=eids_p_arg)
         metrics_log["baseline_seasonal_naive"] = metrics_baseline
         metrics_log["primary_lightgbm"] = metrics_primary
 
@@ -339,8 +341,6 @@ def main() -> None:
             )
     y_hat_train = primary._model.predict(X_fit)
     train_residuals = np.array(y_fit) - np.array(y_hat_train)
-    train_mae = float(np.mean(np.abs(train_residuals)))
-    train_rmse = float(np.sqrt(np.mean(train_residuals ** 2)))
 
     # Validation-set residuals for prediction intervals (out-of-sample)
     if not val_df.empty and len(y_true_p) > 0:
