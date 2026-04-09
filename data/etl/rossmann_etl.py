@@ -37,7 +37,8 @@ class RossmannETL:
 
         Raises:
             FileNotFoundError: If path does not exist.
-            ValueError: If any required column is missing (Date, Store, Sales, Open, Promo, StateHoliday, SchoolHoliday).
+            ValueError: If any required column is missing
+                (Date, Store, Sales, Open, Promo, StateHoliday, SchoolHoliday).
         """
         df = pd.read_csv(path)
         missing = TRAIN_REQUIRED - set(df.columns)
@@ -87,16 +88,14 @@ class RossmannETL:
 
     def normalize_schema(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Rename columns to internal names and add target_cleaned. No cleaning logic; target_cleaned is a copy of target_raw.
+        Rename columns to internal names and add target_cleaned.
 
-        Renames: Date -> date, Store -> store_id, Sales -> target_raw; Open -> open, Promo -> promo,
-        StateHoliday -> state_holiday, SchoolHoliday -> school_holiday, StoreType -> store_type,
-        Assortment -> assortment, CompetitionDistance -> competition_distance.
-        Adds: target_cleaned (initialized from target_raw; clean() will apply rules).
-        Ensures date is datetime and numeric/bool types are set for downstream contract.
+        No cleaning logic; target_cleaned is a copy of target_raw.
+        Ensures date is datetime and numeric/bool types are set for
+        downstream contract.
 
         Args:
-            df: Merged DataFrame (train + store) with columns Date, Store, Sales, Open, Promo, StateHoliday, SchoolHoliday, StoreType, Assortment, CompetitionDistance.
+            df: Merged DataFrame (train + store) with original column names.
 
         Returns:
             DataFrame with normalized column names and target_cleaned added.
@@ -155,7 +154,11 @@ class RossmannETL:
             ValueError: If required columns are missing.
             AssertionError: If date is not strictly increasing per store_id after cleaning.
         """
-        required = {"date", "store_id", "target_cleaned", "open", "promo", "school_holiday", "competition_distance", "state_holiday", "store_type", "assortment"}
+        required = {
+            "date", "store_id", "target_cleaned", "open", "promo",
+            "school_holiday", "competition_distance", "state_holiday",
+            "store_type", "assortment",
+        }
         missing = required - set(df.columns)
         if missing:
             raise ValueError(f"DataFrame missing required columns for cleaning: {sorted(missing)}")

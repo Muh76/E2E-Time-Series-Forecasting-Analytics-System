@@ -22,8 +22,6 @@ async def explain(body: dict | None = None) -> dict:
     body = body or {}
     query = body.get("query", "")
     context = body.get("context") or {}
-    options = body.get("options") or {}
-
     perf = context.get("monitoring_summary", {}).get("performance", {}) or {}
     mae = perf.get("mae", 0)
     mape = perf.get("mape", 0)

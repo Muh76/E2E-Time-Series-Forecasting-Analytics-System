@@ -9,7 +9,6 @@ recursive multi-step. Deterministic (fixed seed).
 import logging
 from typing import Any
 
-import numpy as np
 import pandas as pd
 
 from .base import BaseForecastingModel
@@ -144,7 +143,12 @@ class LightGBMForecast(BaseForecastingModel):
             "Feature columns (%d): %s", len(self._feature_cols), self._feature_cols
         )
 
-        self._cat_cols = [c for c in self._feature_cols if c == self._entity_col or train_df[c].dtype == "object" or train_df[c].dtype.name == "category"]
+        self._cat_cols = [
+            c for c in self._feature_cols
+            if c == self._entity_col
+            or train_df[c].dtype == "object"
+            or train_df[c].dtype.name == "category"
+        ]
 
         train_sub, val_sub = _time_aware_split(train_df, self._date_col, val_frac)
         logger.info(
@@ -202,11 +206,18 @@ class LightGBMForecast(BaseForecastingModel):
                         X_val[c] = X_val[c].astype("category")
                 for col in self._category_levels:
                     if col in X_val.columns:
-                        X_val[col] = X_val[col].astype("category").cat.set_categories(self._category_levels[col])
+                        X_val[col] = X_val[col].astype("category").cat.set_categories(
+                            self._category_levels[col]
+                        )
+                callbacks = (
+                    [lgb.early_stopping(stopping_rounds=10, verbose=False)]
+                    if cfg.get("early_stopping", True)
+                    else None
+                )
                 self._model.fit(
                     X_train, y_train,
                     eval_set=[(X_val, y_val)],
-                    callbacks=[lgb.early_stopping(stopping_rounds=10, verbose=False)] if cfg.get("early_stopping", True) else None,
+                    callbacks=callbacks,
                 )
             else:
                 self._model.fit(X_train, y_train)
@@ -238,7 +249,10 @@ class LightGBMForecast(BaseForecastingModel):
 
         cfg = config or {}
         freq = cfg.get("frequency", self._frequency)
-        freq = pd.DateOffset(days=1) if freq == "D" else (pd.tseries.frequencies.to_offset(freq) if isinstance(freq, str) else freq)
+        if freq == "D":
+            freq = pd.DateOffset(days=1)
+        elif isinstance(freq, str):
+            freq = pd.tseries.frequencies.to_offset(freq)
 
         rows: list[dict[str, Any]] = []
         if self._entity_col is not None and self._entity_col in history_df.columns:
