@@ -114,6 +114,31 @@ jobs:
             || { echo "FAIL: metrics.json not found"; exit 1; }
           echo "All required artifacts present."
 
+      - name: Validate model-feature consistency
+        run: |
+          python -c "
+          import json, joblib, sys
+
+          model = joblib.load('artifacts/models/primary_lightgbm.joblib')
+          with open('artifacts/models/feature_columns.json') as f:
+              feature_columns = json.load(f)
+
+          model_features = set(model._model.feature_name_)
+          saved_features = set(feature_columns)
+
+          if model_features != saved_features:
+              only_model = model_features - saved_features
+              only_json = saved_features - model_features
+              print('FAIL: model.feature_name_ does not match feature_columns.json')
+              if only_model:
+                  print(f'  In model only: {sorted(only_model)}')
+              if only_json:
+                  print(f'  In JSON only:  {sorted(only_json)}')
+              sys.exit(1)
+
+          print(f'Feature consistency verified: {len(saved_features)} features match.')
+          "
+
   smoke:
     name: API Smoke Test
     runs-on: ubuntu-latest
@@ -165,3 +190,17 @@ jobs:
           if [ -f /tmp/uvicorn.pid ]; then
             kill "$(cat /tmp/uvicorn.pid)" 2>/dev/null || true
           fi
+
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t forecasting-service .
+
+      - name: Verify image exists
+        run: docker image inspect forecasting-service > /dev/null 2>&1
