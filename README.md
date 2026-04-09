@@ -296,29 +296,56 @@ All pipeline parameters are in `config/base/default.yaml`. Environment overrides
 ## Project Structure
 
 ```
-├── config/                     Configuration (base + env overrides)
+├── backend/                    FastAPI REST API
+│   └── app/
+│       ├── main.py             Application entry, startup model loading, error handler
+│       ├── api/v1/             Route handlers — forecast, backtest, model_info, copilot
+│       └── services/           Business logic — forecasting, backtesting, model loading, RAG
+├── frontend/                   Streamlit dashboard
+│   ├── app.py                  Multi-page Streamlit entry point
+│   ├── pages/                  Forecast, Backtest, Copilot, and EDA pages
+│   └── components/             Reusable UI helpers (API client, charts, error display)
+├── src/                        React / TypeScript frontend (Vite)
+│   ├── api/                    Typed Axios client for backend communication
+│   ├── components/             Layout, ModelInfoPanel, HealthDot
+│   ├── pages/                  ForecastPage, BacktestPage
+│   └── types/                  Shared TypeScript interfaces matching API contract
+├── artifacts/                  Training outputs (gitignored)
+│   └── models/                 .joblib models, feature_columns.json, model_metadata.json, metrics.json
+├── scripts/                    Executable entry points
+│   ├── run_etl.py              Run the full ETL pipeline
+│   ├── train.py                Train LightGBM + baseline, save artifacts and metadata
+│   ├── inference.py            CLI batch inference
+│   └── smoke_test_api.py       Lightweight API integration tests
+├── .github/
+│   └── workflows/
+│       └── ci.yml              Lint, test, train & validate artifacts, API smoke, frontend build, Docker build
+├── config/                     YAML configuration (base + env overrides)
 ├── data/
-│   ├── etl/                    Extractors, transformers, loaders
-│   ├── feature_engineering/    Lag, rolling, calendar pipelines
-│   ├── raw/                    Landing zone (gitignored)
-│   └── processed/              ETL output (gitignored)
+│   ├── etl/                    Ingest, clean, augment, validate modules
+│   ├── feature_engineering/    Lag, rolling, calendar feature pipelines
+│   ├── raw/                    Raw data landing zone (gitignored)
+│   └── processed/              ETL output parquet (gitignored)
 ├── models/
 │   ├── forecasting/            LightGBM, Seasonal Naive, base interface
-│   ├── evaluation/             Metrics (MAE, RMSE, MAPE)
+│   ├── evaluation/             Metrics computation (MAE, RMSE, MAPE)
 │   └── monitoring/             Drift and performance checks
-├── backend/
-│   └── app/
-│       ├── main.py             FastAPI app, startup loader, error handler
-│       ├── api/v1/             Routers: forecast, backtest, model_info, copilot
-│       └── services/           Forecasting, backtest, model loading, RAG
-├── frontend/                   Streamlit dashboard (pages, components)
-├── copilot/                    LLM agents and prompts
-├── scripts/                    train.py, run_etl.py, inference.py, smoke_test_api.py
-├── artifacts/models/           Serialized models and metadata (gitignored)
-├── tests/                      Unit, integration, e2e
-├── docs/                       Architecture, API contract, data contract
-└── infra/                      GCP Terraform, CI/CD workflows
+├── copilot/                    LLM agents and prompt templates
+├── tests/                      Unit, integration, and e2e tests
+├── docs/                       Architecture and API contract documentation
+└── infra/                      GCP Terraform and deployment configuration
 ```
+
+### Directory Roles
+
+| Directory | Role |
+|-----------|------|
+| `backend/` | Production FastAPI service. Models are loaded once at startup into `app.state`; endpoints handle forecast, backtest, model info, and debug requests with Pydantic validation and structured logging. |
+| `frontend/` | Streamlit-based dashboard for interactive exploration — store-level forecasting, backtesting, EDA, and an LLM copilot that explains (but never generates) predictions. |
+| `src/` | React/TypeScript SPA built with Vite. Provides a typed API client, Recharts-based forecast visualization with confidence bands, and a live API health indicator. |
+| `artifacts/` | Gitignored output of the training pipeline. Contains serialized models, feature column lists, model metadata (version, metrics, training dates), and evaluation metrics. Loaded by the backend at startup. |
+| `scripts/` | Standalone CLI entry points for ETL, training, inference, and smoke testing. Designed to run in CI or locally with no import side-effects. |
+| `.github/` | GitHub Actions CI pipeline. Jobs: Python linting (flake8), pytest, model training with artifact and feature-consistency validation, API smoke tests against a live server, frontend TypeScript/Vite build, and Docker image build on `main`. |
 
 ---
 
