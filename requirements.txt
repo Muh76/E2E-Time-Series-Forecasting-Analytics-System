@@ -14,8 +14,11 @@ pydantic>=2.5.0
 # Smoke test / HTTP client
 requests>=2.31.0
 
-# Linting
+# Linting & Formatting
 flake8>=7.0.0
+black>=24.0.0
+isort>=5.13.0
+pre-commit>=3.6.0
 
 # Testing
 pytest>=7.4.0
