@@ -81,19 +81,29 @@ export interface BacktestResponse {
 // Model Metadata
 // ---------------------------------------------------------------------------
 
+export interface TrainingDateRange {
+  start: string;
+  end: string;
+}
+
+export interface ValidationMetrics {
+  rmse: number | null;
+  mae: number | null;
+  mape: number | null;
+}
+
 export interface ModelMetadata {
   model_version: string;
   trained_at: string;
-  feature_count: number;
+  training_date_range: TrainingDateRange;
   feature_columns: string[];
+  feature_count: number;
+  sample_size: number;
+  hyperparameters: Record<string, unknown>;
+  residual_std: number;
+  validation_metrics: ValidationMetrics;
   max_lag: number;
   lookback_window: number;
-  train_start: string;
-  train_end: string;
-  train_rows: number;
-  train_rmse: number;
-  train_mae: number;
-  residual_std: number;
 }
 
 // ---------------------------------------------------------------------------
