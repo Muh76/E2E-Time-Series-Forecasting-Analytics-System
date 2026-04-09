@@ -289,6 +289,75 @@ def _mock_monitoring_summary() -> dict[str, Any]:
     return normalize_monitoring_summary(raw)
 
 
+def forecast_store(store_id: int, horizon: int) -> dict[str, Any]:
+    """
+    POST /api/v1/forecast/store — store-level forecast.
+
+    Returns the raw JSON response on success.
+    Raises requests.HTTPError with the response attached on failure
+    (caller should inspect response.status_code and response.json()).
+    """
+    url = api_url("/api/v1/forecast/store")
+    resp = requests.post(
+        url,
+        json={"store_id": store_id, "horizon": horizon},
+        timeout=_DEFAULT_TIMEOUT,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def backtest_store(store_id: int, horizon: int, n_splits: int) -> dict[str, Any]:
+    """
+    POST /api/v1/backtest/store — rolling-origin backtesting.
+
+    Returns the raw JSON response on success.
+    Raises requests.HTTPError with the response attached on failure.
+    """
+    url = api_url("/api/v1/backtest/store")
+    resp = requests.post(
+        url,
+        json={"store_id": store_id, "horizon": horizon, "n_splits": n_splits},
+        timeout=120,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def get_model_info() -> dict[str, Any]:
+    """GET /api/v1/model/info — model metadata."""
+    url = api_url("/api/v1/model/info")
+    resp = requests.get(url, timeout=_DEFAULT_TIMEOUT)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def parse_api_error(exc: requests.HTTPError) -> list[dict[str, str]]:
+    """
+    Parse structured validation errors from a 422 response.
+
+    Returns a list of {"field": ..., "message": ...} dicts.
+    Falls back to a single generic error if the response body is not structured.
+    """
+    resp = exc.response
+    if resp is None:
+        return [{"field": "unknown", "message": str(exc)}]
+    try:
+        body = resp.json()
+    except Exception:
+        return [{"field": "unknown", "message": resp.text or str(exc)}]
+
+    detail = body.get("detail")
+    if isinstance(detail, list):
+        return [
+            {"field": item.get("field", "unknown"), "message": item.get("message", str(item))}
+            for item in detail
+        ]
+    if isinstance(detail, str):
+        return [{"field": "unknown", "message": detail}]
+    return [{"field": "unknown", "message": str(body)}]
+
+
 def _context_hash(context: dict[str, Any] | None) -> str:
     """Stable string for cache key from context dict."""
     if not context:

@@ -1,88 +1,89 @@
 """
-Forecast vs Actual — compare actual historical values with forecasts.
+Store-level Forecast — generate and visualise multi-step forecasts.
 """
 
+import requests
 import streamlit as st
 
-from components.api import get_forecast_vs_actual
-from components.charts import render_forecast_vs_actual_plotly
-from components.metrics import format_float, format_mape
-from components.ui import chart_loading_placeholder, with_loading
+from components.api import forecast_store, parse_api_error
+from components.ui import render_error
 
 
 def main() -> None:
-    st.title("Forecast vs Actual")
+    st.title("Store Forecast")
 
-    horizon = st.slider("Forecast horizon (days)", min_value=7, max_value=30, value=14, key="forecast_horizon")
-    compare_baseline = st.checkbox("Compare baseline model", value=False, key="compare_baseline")
+    col1, col2 = st.columns(2)
+    with col1:
+        store_id = st.number_input("Store ID", min_value=1, value=1, step=1, key="fc_store")
+    with col2:
+        horizon = st.slider("Horizon (days)", min_value=1, max_value=60, value=7, key="fc_horizon")
 
-    chart_ph = chart_loading_placeholder()
+    run = st.button("Generate Forecast", disabled=st.session_state.get("fc_loading", False))
 
-    def _fetch_and_build():
-        data = get_forecast_vs_actual(horizon=horizon, include_baseline=compare_baseline)
-        entity_ids = data.get("entity_ids") or []
-        entity_id = data.get("entity_id")
-        selected_entity = entity_id
-        if entity_ids:
-            selected_entity = st.selectbox(
-                "Entity",
-                options=entity_ids,
-                index=entity_ids.index(entity_id) if entity_id in entity_ids else 0,
-                key="forecast_entity",
+    if run:
+        st.session_state["fc_loading"] = True
+        st.session_state.pop("fc_result", None)
+        st.session_state.pop("fc_error", None)
+
+        with st.spinner("Running forecast…"):
+            try:
+                result = forecast_store(int(store_id), horizon)
+                st.session_state["fc_result"] = result
+            except requests.HTTPError as exc:
+                st.session_state["fc_error"] = parse_api_error(exc)
+            except requests.ConnectionError:
+                st.session_state["fc_error"] = [{"field": "connection", "message": "Backend is unreachable."}]
+            finally:
+                st.session_state["fc_loading"] = False
+
+    if st.session_state.get("fc_error"):
+        for err in st.session_state["fc_error"]:
+            field = err["field"]
+            msg = err["message"]
+            label = f"**{field}**: {msg}" if field != "unknown" else msg
+            render_error(label)
+
+    result = st.session_state.get("fc_result")
+    if result:
+        forecasts = result.get("forecasts", [])
+
+        if forecasts:
+            dates = [f["date"] for f in forecasts]
+            values = [f["forecast"] for f in forecasts]
+            conf_low = [f.get("confidence_low") for f in forecasts]
+            conf_high = [f.get("confidence_high") for f in forecasts]
+
+            import plotly.graph_objects as go
+
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=dates, y=values, mode="lines+markers", name="Forecast", line=dict(color="#3b82f6")))
+            if conf_low[0] is not None and conf_high[0] is not None:
+                fig.add_trace(go.Scatter(
+                    x=dates + dates[::-1],
+                    y=conf_high + conf_low[::-1],
+                    fill="toself",
+                    fillcolor="rgba(59,130,246,0.12)",
+                    line=dict(width=0),
+                    name="95% CI",
+                    showlegend=True,
+                ))
+            fig.update_layout(
+                xaxis_title="Date",
+                yaxis_title="Forecast",
+                hovermode="x unified",
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                margin=dict(t=30, b=60, l=60, r=40),
             )
-            if selected_entity != entity_id:
-                data = get_forecast_vs_actual(entity_id=selected_entity, horizon=horizon, include_baseline=compare_baseline)
-        actual_list = data.get("actual") or []
-        forecast_list = data.get("forecast") or []
-        baseline_list = (data.get("baseline") or []) if compare_baseline else []
-        date_to_actual = {r["date"]: r["value"] for r in actual_list}
-        date_to_forecast = {r["date"]: r["value"] for r in forecast_list}
-        date_to_baseline = {r["date"]: r["value"] for r in baseline_list} if baseline_list else {}
-        all_dates = sorted(set(date_to_actual) | set(date_to_forecast) | set(date_to_baseline))
-        actual_vals = [date_to_actual.get(d) for d in all_dates]
-        forecast_vals = [date_to_forecast.get(d) for d in all_dates]
-        baseline_vals = [date_to_baseline.get(d) for d in all_dates] if date_to_baseline else None
-        return data, all_dates, actual_vals, forecast_vals, baseline_vals
+            st.plotly_chart(fig, use_container_width=True)
 
-    data, all_dates, actual_vals, forecast_vals, baseline_vals = with_loading(_fetch_and_build)
-    chart_ph.empty()
-    render_forecast_vs_actual_plotly(
-        dates=all_dates,
-        actual=actual_vals,
-        forecast=forecast_vals,
-        title="",
-        baseline=baseline_vals,
-    )
-
-    metrics = data.get("metrics") or {}
-    mae = metrics.get("mae")
-    rmse = metrics.get("rmse")
-    mape = metrics.get("mape")
-
-    st.markdown("---")
-    st.subheader("Metrics")
-    if compare_baseline and data.get("baseline_metrics"):
-        baseline_metrics = data.get("baseline_metrics") or {}
-        model_name = data.get("model_name") or "LightGBM"
-        baseline_name = data.get("baseline_model_name") or "Baseline"
-        st.dataframe(
-            {
-                "Model": [baseline_name, model_name],
-                "MAE": [format_float(baseline_metrics.get("mae")), format_float(mae)],
-                "RMSE": [format_float(baseline_metrics.get("rmse")), format_float(rmse)],
-                "MAPE": [format_mape(baseline_metrics.get("mape")), format_mape(mape)],
-            },
-            use_container_width=True,
-            hide_index=True,
-        )
-    else:
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric(label="MAE", value=format_float(mae))
-        with col2:
-            st.metric(label="RMSE", value=format_float(rmse))
-        with col3:
-            st.metric(label="MAPE", value=format_mape(mape))
+            st.subheader("Forecast Data")
+            st.dataframe(
+                [{"Date": f["date"], "Forecast": round(f["forecast"], 2),
+                  "Low": f.get("confidence_low"), "High": f.get("confidence_high")}
+                 for f in forecasts],
+                use_container_width=True,
+                hide_index=True,
+            )
 
 
 main()
