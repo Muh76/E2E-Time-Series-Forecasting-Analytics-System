@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
+import HealthDot from "./HealthDot";
 import ModelInfoPanel from "./ModelInfoPanel";
 import "./Layout.css";
 
@@ -11,7 +12,9 @@ export default function Layout({ children }: LayoutProps) {
   return (
     <div className="layout">
       <nav className="navbar">
-        <div className="navbar-brand">Forecasting</div>
+        <div className="navbar-brand">
+          <HealthDot /> Forecasting
+        </div>
         <div className="navbar-links">
           <NavLink to="/forecast" className={({ isActive }) => (isActive ? "active" : "")}>
             Forecast

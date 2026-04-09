@@ -22,6 +22,10 @@ data/feature_store/*
 artifacts/*
 !artifacts/.gitkeep
 
+# Node
+node_modules/
+tsconfig.tsbuildinfo
+
 # IDE
 .idea/
 .vscode/
