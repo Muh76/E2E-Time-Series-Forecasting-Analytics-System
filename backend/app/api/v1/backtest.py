@@ -19,6 +19,8 @@ from backend.app.api.v1.validators import (
     get_valid_store_ids,
 )
 from backend.app.services.backtest_service import backtest_store
+from backend.app.services.model_loader import get_model_metadata
+from backend.app.services.monitoring_service import update_monitoring_from_backtest
 
 logger = logging.getLogger(__name__)
 
@@ -97,5 +99,11 @@ async def post_backtest_store(request: Request, body: BacktestRequest) -> Backte
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    try:
+        metadata = get_model_metadata()
+    except (RuntimeError, TypeError, ValueError):
+        metadata = None
+    update_monitoring_from_backtest(result, model_metadata=metadata)
 
     return BacktestResponse(**result)

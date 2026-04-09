@@ -323,13 +323,12 @@ def main() -> None:
     train_start = str(train_dates.min())[:10]
     train_end = str(train_dates.max())[:10]
 
-    # Training-set residuals (in-sample fit quality)
+    # In-sample training metrics
     X_train_all = train_df[primary._feature_cols].copy()
     y_train_all = train_df[target_col]
     valid = X_train_all.notna().all(axis=1) & y_train_all.notna()
     X_fit = X_train_all.loc[valid]
     y_fit = y_train_all.loc[valid]
-    # Convert object columns to category (same as fit)
     for c in X_fit.columns:
         if X_fit[c].dtype == "object":
             X_fit[c] = X_fit[c].astype("category")
@@ -339,10 +338,24 @@ def main() -> None:
                 primary._category_levels[c]
             )
     y_hat_train = primary._model.predict(X_fit)
-    residuals = np.array(y_fit) - np.array(y_hat_train)
-    train_mae = float(np.mean(np.abs(residuals)))
-    train_rmse = float(np.sqrt(np.mean(residuals ** 2)))
-    residual_std = float(np.std(residuals))
+    train_residuals = np.array(y_fit) - np.array(y_hat_train)
+    train_mae = float(np.mean(np.abs(train_residuals)))
+    train_rmse = float(np.sqrt(np.mean(train_residuals ** 2)))
+
+    # Validation-set residuals for prediction intervals (out-of-sample)
+    if not val_df.empty and len(y_true_p) > 0:
+        val_residuals = np.array(y_true_p) - np.array(y_pred_p)
+        residual_std = float(np.std(val_residuals))
+        logger.info(
+            "residual_std computed from validation set (%d samples): %.4f",
+            len(val_residuals), residual_std,
+        )
+    else:
+        residual_std = float(np.std(train_residuals))
+        logger.warning(
+            "Validation set empty — residual_std computed from training set (in-sample): %.4f",
+            residual_std,
+        )
 
     metadata = {
         "model_version": model_version,
