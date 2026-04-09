@@ -98,6 +98,9 @@ def run_feature_pipeline(
     # 4. Concatenate: base + all feature blocks (same index; no row drop)
     out = pd.concat([base] + feature_dfs, axis=1)
     n_features = sum(f.shape[1] for f in feature_dfs)
-    logger.info("Feature step: concatenate %d feature columns (total cols=%d, rows=%d)", n_features, out.shape[1], len(out))
+    logger.info(
+        "Feature step: concatenate %d feature columns (total cols=%d, rows=%d)",
+        n_features, out.shape[1], len(out),
+    )
 
     return out

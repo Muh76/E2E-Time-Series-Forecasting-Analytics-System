@@ -19,16 +19,16 @@ import os
 import sys
 from pathlib import Path
 
+import joblib
+import pandas as pd
+import yaml
+
 # Project root = parent of scripts/
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-import joblib
-import pandas as pd
-import yaml
-
-from data.feature_engineering import run_feature_pipeline
+from data.feature_engineering import run_feature_pipeline  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,

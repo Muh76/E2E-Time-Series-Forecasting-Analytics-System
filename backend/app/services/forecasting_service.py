@@ -202,7 +202,7 @@ def forecast_store(store_id: int, horizon: int, model: Any, feature_columns: lis
     logger.info(
         "Enforcing feature column alignment: expecting %d columns", len(feature_columns)
     )
-    aligned_df = _enforce_feature_columns(featured_df, feature_columns)
+    _enforce_feature_columns(featured_df, feature_columns)
     logger.info("Feature column alignment verified for store_id=%d", store_id)
 
     # Pass config so model.predict() can re-run feature pipeline for recursive
