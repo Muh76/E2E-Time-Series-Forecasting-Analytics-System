@@ -14,6 +14,40 @@ def _summary_only(summary: dict) -> dict:
     return {k: v for k, v in summary.items() if k != "rolling_series"}
 
 
+def _optional_session_forecast() -> list | None:
+    fc = st.session_state.get("fc_forecast") or {}
+    f = fc.get("forecasts")
+    return f if isinstance(f, list) and f else None
+
+
+def _render_copilot_result(result: dict) -> None:
+    answer = result.get("answer") or ""
+    reasoning = result.get("reasoning") or ""
+    explanation = result.get("explanation") or ""
+    sources = result.get("sources", [])
+    generated_at = result.get("generated_at", "")
+
+    st.markdown("---")
+    st.subheader("Response")
+    if answer:
+        st.markdown("**Answer**")
+        st.markdown(answer)
+    elif explanation:
+        st.markdown(explanation)
+    conf = result.get("confidence")
+    if conf is not None:
+        st.caption(f"Confidence: {float(conf):.2f}")
+    if reasoning:
+        with st.expander("Reasoning (signals used)"):
+            st.markdown(reasoning)
+    if sources:
+        with st.expander("Sources"):
+            for s in sources:
+                st.write(f"- {s.get('type', '')}: {s.get('note', s.get('title', s))}")
+    if generated_at:
+        st.caption(f"Generated at {generated_at}")
+
+
 def main() -> None:
     st.title("Insight Copilot")
 
@@ -45,6 +79,9 @@ def main() -> None:
                 "timestamp": alert_context.get("timestamp"),
             },
         }
+        of = _optional_session_forecast()
+        if of is not None:
+            context["forecast"] = of
         try:
             result = with_loading(copilot_explain, query=query, context=context, message=LOADING_COPIOT_MESSAGE)
         except requests.RequestException as exc:
@@ -58,22 +95,7 @@ def main() -> None:
             disabled=True,
         )
 
-        explanation = result.get("explanation", "")
-        sources = result.get("sources", [])
-        generated_at = result.get("generated_at", "")
-
-        st.markdown("---")
-        st.subheader("Response")
-        with st.container():
-            st.markdown(explanation)
-
-        if sources:
-            with st.expander("Sources"):
-                for s in sources:
-                    st.write(f"- {s.get('type', '')}: {s.get('note', s)}")
-
-        if generated_at:
-            st.caption(f"Generated at {generated_at}")
+        _render_copilot_result(result)
         return
 
     # Normal flow: user enters query manually
@@ -97,6 +119,9 @@ def main() -> None:
                     "overall_status": monitoring_summary.get("overall_status"),
                     "recent_activity": monitoring_summary.get("recent_activity") or {},
                 }
+                of = _optional_session_forecast()
+                if of is not None:
+                    context["forecast"] = of
                 return copilot_explain(query=query.strip(), context=context)
 
             try:
@@ -105,22 +130,7 @@ def main() -> None:
                 render_error(describe_request_error(exc))
                 return
 
-            explanation = result.get("explanation", "")
-            sources = result.get("sources", [])
-            generated_at = result.get("generated_at", "")
-
-            st.markdown("---")
-            st.subheader("Response")
-            with st.container():
-                st.markdown(explanation)
-
-            if sources:
-                with st.expander("Sources"):
-                    for s in sources:
-                        st.write(f"- {s.get('type', '')}: {s.get('note', s)}")
-
-            if generated_at:
-                st.caption(f"Generated at {generated_at}")
+            _render_copilot_result(result)
 
 
 main()

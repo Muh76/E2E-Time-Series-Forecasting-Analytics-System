@@ -25,5 +25,5 @@ def test_explain_performance_keywords():
 
 def test_explain_default_snapshot():
     text, sources = build_rule_based_explanation("", {})
-    assert "Insight Copilot" in text or "MAE" in text
+    assert "## Answer" in text or "MAE" in text
     assert sources

@@ -226,19 +226,28 @@ def forecast_store(store_id: int, horizon: int) -> dict[str, Any]:
     return resp.json()
 
 
-def get_forecast_evaluation_metrics(store_id: int | None = None) -> dict[str, Any]:
+def get_forecast_evaluation_metrics(
+    store_id: int | None = None,
+    *,
+    window: int = 7,
+) -> dict[str, Any]:
     """
-    GET /api/v1/metrics — last forecast vs ground truth for the given store (optional).
+    GET /api/v1/metrics — ``current`` snapshot plus ``rolling`` MAE/MAPE series.
 
     Call after ``forecast_store`` so the backend has recorded the forecast.
     """
     url = api_url("/api/v1/metrics")
-    params: dict[str, int] = {}
+    params: dict[str, int] = {"window": max(2, min(int(window), 90))}
     if store_id is not None:
         params["store_id"] = int(store_id)
-    resp = requests.get(url, params=params or None, timeout=_DEFAULT_TIMEOUT)
+    resp = requests.get(url, params=params, timeout=_DEFAULT_TIMEOUT)
     resp.raise_for_status()
     return resp.json()
+
+
+def metrics_response_current(payload: dict[str, Any]) -> dict[str, Any]:
+    """Normalize metrics API body: return the ``current`` block if present."""
+    return payload.get("current", payload)
 
 
 def copilot_forecast_insights(

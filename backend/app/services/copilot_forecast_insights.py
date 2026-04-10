@@ -110,6 +110,60 @@ def _confidence_score(
     return float(round(min(0.92, max(0.18, raw)), 3))
 
 
+def analyze_forecast_structure(forecast: list[Any] | None) -> dict[str, Any] | None:
+    """
+    Deterministic trend, volatility, and step-change summary for Q&A copilot.
+
+    Returns None if ``forecast`` is empty or not parseable; otherwise keys:
+    ``n_points``, ``trend`` (upward|downward|flat|moderate_up|moderate_down|insufficient),
+    ``slope_normalized``, ``coefficient_of_variation``, ``volatility`` (high|low_or_moderate),
+    ``n_change_points``, ``change_point_indices`` (first 10).
+    """
+    if not forecast:
+        return None
+    values = _extract_values(forecast)
+    y = np.asarray(values, dtype=float)
+    if len(y) < 2:
+        return {
+            "n_points": int(len(y)),
+            "trend": "insufficient",
+            "slope_normalized": 0.0,
+            "coefficient_of_variation": 0.0,
+            "volatility": "unknown",
+            "n_change_points": 0,
+            "change_point_indices": [],
+        }
+
+    slope_n = _ols_slope_normalized(y)
+    cv = _coefficient_of_variation(y)
+    n_anom, idx = _detect_step_anomalies(y)
+
+    if cv < 0.02 and abs(slope_n) < 0.18:
+        trend = "flat"
+    elif slope_n > _TREND_SLOPE_STRONG:
+        trend = "upward"
+    elif slope_n < -_TREND_SLOPE_STRONG:
+        trend = "downward"
+    elif abs(slope_n) < _TREND_SLOPE_WEAK:
+        trend = "flat"
+    elif slope_n > 0:
+        trend = "moderate_up"
+    else:
+        trend = "moderate_down"
+
+    vol = "high" if cv >= _CV_HIGH else "low_or_moderate"
+
+    return {
+        "n_points": int(len(y)),
+        "trend": trend,
+        "slope_normalized": round(float(slope_n), 4),
+        "coefficient_of_variation": round(float(cv), 4),
+        "volatility": vol,
+        "n_change_points": int(n_anom),
+        "change_point_indices": [int(i) for i in idx[:10]],
+    }
+
+
 def build_forecast_insights(forecast: list[Any], metrics: dict[str, Any] | None) -> dict[str, Any]:
     """
     Produce summary, insights text, and confidence from forecast + optional metrics.

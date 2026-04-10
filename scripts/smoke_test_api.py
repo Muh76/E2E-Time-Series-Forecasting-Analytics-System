@@ -85,17 +85,23 @@ def main() -> None:
     check("status 200", r.status_code == 200, f"got {r.status_code}")
     if r.status_code == 200:
         body = r.json()
-        check("has status", "status" in body)
-        mst = body.get("status")
+        check("has current", "current" in body)
+        check("has rolling", "rolling" in body)
+        cur = body.get("current") or {}
+        roll = body.get("rolling") or {}
+        check("rolling has timestamps", "timestamps" in roll)
+        check("rolling has mae", "mae" in roll)
+        check("rolling has mape", "mape" in roll)
+        mst = cur.get("status")
         check(
-            "status is ok or no_ground_truth",
+            "current.status is ok or no_ground_truth",
             mst in ("ok", "no_ground_truth"),
             f"got {mst}",
         )
         if mst == "ok":
-            check("mae present", body.get("mae") is not None)
-            check("rmse present", body.get("rmse") is not None)
-        drift = body.get("drift")
+            check("mae present", cur.get("mae") is not None)
+            check("rmse present", cur.get("rmse") is not None)
+        drift = cur.get("drift")
         if drift:
             check("drift has drift_score", "drift_score" in drift)
             check("drift has status", drift.get("status") in ("low", "medium", "high"))
