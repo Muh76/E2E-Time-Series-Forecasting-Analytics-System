@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from backend.app.api.v1.validators import HORIZON_MAX, HORIZON_MIN, get_valid_store_ids
 from backend.app.services.forecasting_service import forecast_store, get_store_last_date
+from backend.app.services.metrics import record_forecast_for_evaluation
 from backend.app.services.model_loader import get_model_metadata
 from backend.app.services.monitoring_service import record_forecast_activity
 
@@ -97,6 +98,7 @@ async def post_forecast_store(request: Request, body: ForecastRequest) -> Foreca
             f["confidence_low"] = None
             f["confidence_high"] = None
 
+    record_forecast_for_evaluation(body.store_id, body.horizon, forecasts)
     record_forecast_activity(body.store_id, body.horizon)
 
     return ForecastResponse(

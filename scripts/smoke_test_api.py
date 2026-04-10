@@ -79,6 +79,23 @@ def main() -> None:
             check("forecast item has 'date'", "date" in first)
             check("forecast item has 'forecast'", "forecast" in first)
 
+    # 2b. GET /api/v1/metrics (uses last forecast vs actuals when dates overlap)
+    print("\n2b. GET /api/v1/metrics")
+    r = requests.get(f"{base}/api/v1/metrics", timeout=10)
+    check("status 200", r.status_code == 200, f"got {r.status_code}")
+    if r.status_code == 200:
+        body = r.json()
+        check("has status", "status" in body)
+        mst = body.get("status")
+        check(
+            "status is ok or no_ground_truth",
+            mst in ("ok", "no_ground_truth"),
+            f"got {mst}",
+        )
+        if mst == "ok":
+            check("mae present", body.get("mae") is not None)
+            check("rmse present", body.get("rmse") is not None)
+
     # 3. POST /api/v1/forecast/store/debug
     print(f"\n3. POST /api/v1/forecast/store/debug  (store_id={STORE_ID}, horizon={HORIZON})")
     r = requests.post(
