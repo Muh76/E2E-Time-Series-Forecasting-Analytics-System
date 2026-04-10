@@ -359,6 +359,22 @@ def build_structured_copilot_response(query: str, context: dict[str, Any]) -> di
         reasoning_lines.append(f"- **Open alerts**: **{len(alerts)}** total.")
         add_source("alerts", "Monitoring alerts", f"{len(alerts)} items")
 
+    meta = context.get("latest_forecast_meta")
+    if meta:
+        reasoning_lines.append(
+            "- **Latest forecast (API)**: "
+            f"store `{meta.get('store_id')}`, horizon `{meta.get('horizon')}`, "
+            f"`{meta.get('n_points')}` points, recorded `{meta.get('recorded_at')}`."
+        )
+        add_source("latest_forecast", "Server forecast snapshot", str(meta.get("recorded_at") or ""))
+
+    lfe = (context.get("monitoring_summary") or {}).get("latest_forecast_evaluation") or {}
+    if lfe.get("status") and str(lfe.get("status")) != "ok":
+        reason = str(lfe.get("reason") or "")
+        if reason != "no_forecast_record":
+            msg = str(lfe.get("message") or "")[:240]
+            reasoning_lines.append(f"- **Forecast vs actuals**: `{reason}` — {msg}")
+
     reasoning_lines.insert(0, f"- **Query focus**: {', '.join(intents)}.")
 
     if not sources:

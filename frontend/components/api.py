@@ -7,7 +7,6 @@ Calls the real FastAPI backend; failures raise ``requests.RequestException``
 (callers should catch and show UI errors — no silent mock data).
 """
 
-import json
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -250,6 +249,21 @@ def metrics_response_current(payload: dict[str, Any]) -> dict[str, Any]:
     return payload.get("current", payload)
 
 
+def metrics_has_recorded_forecast(metrics_payload: dict[str, Any] | None) -> bool:
+    """
+    True if the API has a last-forecast record (POST /forecast/store or /predict).
+
+    ``GET /api/v1/metrics`` returns ``current.reason == "no_forecast_record"`` when none;
+    other outcomes still imply a recorded forecast series exists on the server.
+    """
+    if not metrics_payload:
+        return False
+    cur = metrics_response_current(metrics_payload)
+    if cur.get("status") == "ok":
+        return True
+    return cur.get("reason") != "no_forecast_record"
+
+
 def copilot_forecast_insights(
     forecast: list[Any],
     metrics: dict[str, Any] | None = None,
@@ -343,22 +357,17 @@ def describe_request_error(exc: BaseException) -> str:
     return str(exc) or "Request failed."
 
 
-def _context_hash(context: dict[str, Any] | None) -> str:
-    """Stable string for cache key from context dict."""
-    if not context:
-        return ""
-    return json.dumps(context, sort_keys=True, default=str)
-
-
-@st.cache_data(ttl=120)
-def _cached_copilot_explain_api(
+def copilot_explain(
     query: str,
-    context_serialized: str,
-    options_serialized: str,
+    context: dict[str, Any] | None = None,
+    options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Cached API call; only successful responses are cached. Cache key includes query + context hash."""
-    context: dict[str, Any] | None = json.loads(context_serialized) if context_serialized else None
-    options: dict[str, Any] | None = json.loads(options_serialized) if options_serialized else None
+    """
+    Request explanation from copilot. POST /api/v1/copilot/explain.
+
+    Not cached: the backend merges the latest recorded forecast on each call so
+    responses stay aligned with the current API state.
+    """
     payload: dict[str, Any] = {"query": query or "What is the current model health?"}
     if context:
         payload["context"] = context
@@ -368,20 +377,6 @@ def _cached_copilot_explain_api(
     resp = requests.post(url, json=payload, timeout=30)
     resp.raise_for_status()
     return resp.json()
-
-
-def copilot_explain(
-    query: str,
-    context: dict[str, Any] | None = None,
-    options: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """
-    Request explanation from copilot. POST /api/v1/copilot/explain.
-    Raises ``requests.RequestException`` on failure.
-    """
-    context_serialized = _context_hash(context)
-    options_serialized = _context_hash(options) if options else ""
-    return _cached_copilot_explain_api(query, context_serialized, options_serialized)
 
 
 def get_monitoring_series(

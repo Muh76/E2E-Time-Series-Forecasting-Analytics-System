@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+import backend.app.bootstrap_env  # noqa: F401 — loads `.env` from project root first
 from backend.app.api.v1.backtest import router as backtest_router
 from backend.app.api.v1.chat import router as chat_router
 from backend.app.api.v1.copilot import router as copilot_router
