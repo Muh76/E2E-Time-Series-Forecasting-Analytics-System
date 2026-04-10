@@ -9,6 +9,7 @@ from backend.app.api.v1.backtest import router as backtest_router
 from backend.app.api.v1.chat import router as chat_router
 from backend.app.api.v1.copilot import router as copilot_router
 from backend.app.api.v1.forecast import router as forecast_router
+from backend.app.api.v1.metrics_endpoint import router as forecast_metrics_router
 from backend.app.api.v1.model_info import router as model_info_router
 from backend.app.api.v1.monitoring import router as monitoring_router
 from backend.app.services.model_loader import load_baseline_model, load_feature_columns, load_primary_model
@@ -63,3 +64,4 @@ app.include_router(copilot_router, prefix="/api/v1")
 app.include_router(forecast_router, prefix="/api/v1")
 app.include_router(model_info_router, prefix="/api/v1")
 app.include_router(monitoring_router, prefix="/api/v1")
+app.include_router(forecast_metrics_router, prefix="/api/v1")
