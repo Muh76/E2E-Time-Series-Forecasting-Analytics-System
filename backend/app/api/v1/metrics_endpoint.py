@@ -16,7 +16,7 @@ async def get_forecast_metrics(
     store_id: Annotated[int | None, Query(description="Optional; must match last forecast store")] = None,
 ) -> dict:
     """
-    After ``POST /api/v1/forecast/store``, compares returned forecast dates to
+    After ``POST /api/v1/forecast/store`` or ``POST /api/v1/predict``, compares forecast dates to
     processed data actuals. Returns MAE, RMSE, MAPE when overlapping ground
     truth exists; otherwise ``no_ground_truth`` with a fixed message.
 

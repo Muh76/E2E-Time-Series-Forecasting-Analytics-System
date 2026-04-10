@@ -310,6 +310,23 @@ def forecast_store(store_id: int, horizon: int) -> dict[str, Any]:
     return resp.json()
 
 
+def predict_store(store_id: int, horizon: int, *, include_insights: bool = False) -> dict[str, Any]:
+    """
+    POST /api/v1/predict — forecast, aligned metrics, and optional rule-based copilot.
+
+    Returns ``forecast`` (list), ``metrics`` (dict), and ``copilot`` (dict or null).
+    """
+    url = api_url("/api/v1/predict")
+    resp = requests.post(
+        url,
+        params={"include_insights": str(include_insights).lower()},
+        json={"store_id": store_id, "horizon": horizon},
+        timeout=_DEFAULT_TIMEOUT if not include_insights else max(_DEFAULT_TIMEOUT, 60),
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
 def backtest_store(store_id: int, horizon: int, n_splits: int) -> dict[str, Any]:
     """
     POST /api/v1/backtest/store — rolling-origin backtesting.

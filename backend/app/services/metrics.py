@@ -32,7 +32,7 @@ _CONFIG_PATH = _PROJECT_ROOT / "config" / "base" / "default.yaml"
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-# Last forecast from POST /forecast/store (for evaluation vs actuals)
+# Last forecast from POST /forecast/store or POST /predict (for evaluation vs actuals)
 _last_forecast_record: dict[str, Any] | None = None
 
 NO_GROUND_TRUTH: dict[str, str] = {
