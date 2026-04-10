@@ -149,6 +149,23 @@ def main() -> None:
         check("has explanation", "explanation" in body and len(body.get("explanation", "")) > 0)
         check("has sources", "sources" in body)
 
+    # 7. POST /api/v1/copilot (rule-based forecast insights)
+    print("\n7. POST /api/v1/copilot")
+    r = requests.post(
+        f"{base}/api/v1/copilot",
+        json={
+            "forecast": [{"forecast": 100 + i * 2.0} for i in range(8)],
+            "metrics": {"mae": 5.2, "rmse": 6.1, "mape": 4.5},
+        },
+        timeout=30,
+    )
+    check("status 200", r.status_code == 200, f"got {r.status_code}")
+    if r.status_code == 200:
+        body = r.json()
+        check("has summary", "summary" in body and len(body.get("summary", "")) > 0)
+        check("has insights", "insights" in body and len(body.get("insights", "")) > 0)
+        check("has confidence", "confidence" in body and isinstance(body.get("confidence"), (int, float)))
+
     # Summary
     total = passed + failed
     print(f"\n{'='*40}")
