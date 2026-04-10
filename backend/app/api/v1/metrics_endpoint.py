@@ -19,5 +19,8 @@ async def get_forecast_metrics(
     After ``POST /api/v1/forecast/store``, compares returned forecast dates to
     processed data actuals. Returns MAE, RMSE, MAPE when overlapping ground
     truth exists; otherwise ``no_ground_truth`` with a fixed message.
+
+    When processed data is sufficient, includes ``drift`` with ``drift_score``
+    (0--1) and ``status`` ``low`` / ``medium`` / ``high`` (early vs late window).
     """
     return evaluate_last_forecast_vs_actuals(store_id=store_id)

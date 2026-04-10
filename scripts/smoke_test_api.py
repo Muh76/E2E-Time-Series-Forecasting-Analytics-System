@@ -95,6 +95,10 @@ def main() -> None:
         if mst == "ok":
             check("mae present", body.get("mae") is not None)
             check("rmse present", body.get("rmse") is not None)
+        drift = body.get("drift")
+        if drift:
+            check("drift has drift_score", "drift_score" in drift)
+            check("drift has status", drift.get("status") in ("low", "medium", "high"))
 
     # 3. POST /api/v1/forecast/store/debug
     print(f"\n3. POST /api/v1/forecast/store/debug  (store_id={STORE_ID}, horizon={HORIZON})")
