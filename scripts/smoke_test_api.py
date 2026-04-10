@@ -100,6 +100,44 @@ def main() -> None:
             check("drift has drift_score", "drift_score" in drift)
             check("drift has status", drift.get("status") in ("low", "medium", "high"))
 
+    # 2c. POST /api/v1/predict (unified forecast + metrics + optional copilot)
+    print(f"\n2c. POST /api/v1/predict  (store_id={STORE_ID}, horizon={HORIZON}, include_insights=true)")
+    r = requests.post(
+        f"{base}/api/v1/predict",
+        params={"include_insights": "true"},
+        json={"store_id": STORE_ID, "horizon": HORIZON},
+        timeout=120,
+    )
+    check("status 200", r.status_code == 200, f"got {r.status_code}")
+    if r.status_code == 200:
+        body = r.json()
+        check("has forecast list", isinstance(body.get("forecast"), list))
+        check("has metrics object", isinstance(body.get("metrics"), dict))
+        check("metrics has status", "status" in body.get("metrics", {}))
+        fc = body.get("forecast") or []
+        check(
+            f"predict forecast length == {HORIZON}",
+            len(fc) == HORIZON,
+            f"got {len(fc)}",
+        )
+        cop = body.get("copilot")
+        check("copilot present when include_insights", cop is not None)
+        if cop:
+            check("copilot.summary", isinstance(cop.get("summary"), str) and len(cop["summary"]) > 0)
+            check("copilot.confidence", isinstance(cop.get("confidence"), (int, float)))
+
+    print("\n2d. POST /api/v1/predict  (include_insights=false)")
+    r = requests.post(
+        f"{base}/api/v1/predict",
+        params={"include_insights": "false"},
+        json={"store_id": STORE_ID, "horizon": HORIZON},
+        timeout=120,
+    )
+    check("status 200", r.status_code == 200, f"got {r.status_code}")
+    if r.status_code == 200:
+        body = r.json()
+        check("copilot null when disabled", body.get("copilot") is None)
+
     # 3. POST /api/v1/forecast/store/debug
     print(f"\n3. POST /api/v1/forecast/store/debug  (store_id={STORE_ID}, horizon={HORIZON})")
     r = requests.post(

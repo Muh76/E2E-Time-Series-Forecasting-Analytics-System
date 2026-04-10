@@ -14,10 +14,9 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 
 from backend.app.api.v1.validators import HORIZON_MAX, HORIZON_MIN, get_valid_store_ids
-from backend.app.services.forecasting_service import forecast_store, get_store_last_date
-from backend.app.services.metrics import record_forecast_for_evaluation
+from backend.app.services.forecasting_service import get_store_last_date
 from backend.app.services.model_loader import get_model_metadata
-from backend.app.services.monitoring_service import record_forecast_activity
+from backend.app.services.prediction_pipeline import execute_store_forecast
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +63,7 @@ async def post_forecast_store(request: Request, body: ForecastRequest) -> Foreca
 
     t_start = time.perf_counter()
     try:
-        forecasts = forecast_store(body.store_id, body.horizon, model, feature_columns)
+        forecasts = execute_store_forecast(body.store_id, body.horizon, model, feature_columns)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except RuntimeError as exc:
@@ -73,10 +72,8 @@ async def post_forecast_store(request: Request, body: ForecastRequest) -> Foreca
 
     try:
         metadata = get_model_metadata()
-        residual_std = float(metadata.get("residual_std", 0))
         model_version = metadata.get("model_version", "unknown")
     except (RuntimeError, TypeError, ValueError):
-        residual_std = 0.0
         model_version = "unknown"
 
     logger.info(
@@ -86,20 +83,6 @@ async def post_forecast_store(request: Request, body: ForecastRequest) -> Foreca
         latency_ms,
         model_version,
     )
-
-    if residual_std > 0:
-        z = 1.96
-        for f in forecasts:
-            point = f["forecast"]
-            f["confidence_low"] = round(point - z * residual_std, 2)
-            f["confidence_high"] = round(point + z * residual_std, 2)
-    else:
-        for f in forecasts:
-            f["confidence_low"] = None
-            f["confidence_high"] = None
-
-    record_forecast_for_evaluation(body.store_id, body.horizon, forecasts)
-    record_forecast_activity(body.store_id, body.horizon)
 
     return ForecastResponse(
         store_id=body.store_id,
