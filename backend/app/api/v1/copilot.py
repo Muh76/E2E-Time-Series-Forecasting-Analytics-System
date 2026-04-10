@@ -1,8 +1,8 @@
 """
-Copilot API: rule-based explanations for forecasts and metrics (no LLM).
+Copilot API: forecast insights and explanations (optional OpenAI for /explain).
 
 POST /api/v1/copilot — forecast series + metrics → summary, insights, confidence.
-POST /api/v1/copilot/explain — query + optional context; returns markdown explanation.
+POST /api/v1/copilot/explain — query + context; OpenAI when ``OPENAI_API_KEY`` is set, else rules.
 """
 
 import logging
@@ -13,8 +13,10 @@ from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from backend.app.services.copilot_context import enrich_context_with_latest_forecast
 from backend.app.services.copilot_explain import build_structured_copilot_response
 from backend.app.services.copilot_forecast_insights import build_forecast_insights
+from backend.app.services.copilot_openai import explain_with_openai
 
 logger = logging.getLogger(__name__)
 
@@ -68,21 +70,51 @@ class CopilotExplainRequest(BaseModel):
 async def explain(body: CopilotExplainRequest | None = None) -> dict:
     """
     Generate explanation for a natural-language query using monitoring context.
+
+    By default, merges the latest server-recorded forecast (from POST /forecast/store
+    or /predict) and its evaluation metrics into context so answers track the current run.
+    Set ``options.skip_latest_forecast_merge`` to true to use only the client payload.
+
+    When ``OPENAI_API_KEY`` is set and ``options.use_openai`` is not false, uses OpenAI
+    with forecast + metrics + drift in the prompt; otherwise falls back to rule-based text.
     """
     body = body or CopilotExplainRequest()
     query = body.query or ""
     context = body.context or {}
+    opts = body.options or {}
+    skip_merge = bool(opts.get("skip_latest_forecast_merge"))
+    use_openai = opts.get("use_openai")
+    if use_openai is None:
+        use_openai = True
+
+    if not skip_merge:
+        context = enrich_context_with_latest_forecast(context)
 
     t0 = time.perf_counter()
-    out = build_structured_copilot_response(query, context)
+    out: dict[str, Any] | None = None
+    generator = "rules"
+
+    if use_openai:
+        out = await explain_with_openai(query, context)
+        if out is not None:
+            generator = "openai"
+
+    if out is None:
+        out = build_structured_copilot_response(query, context)
+        generator = "rules"
+
     latency_ms = round((time.perf_counter() - t0) * 1000, 2)
     sources = list(out["sources"])
 
-    if not any(s.get("type") == "monitoring_summary" for s in sources):
+    if generator == "openai":
+        if not any(s.get("type") == "monitoring_summary" for s in sources):
+            sources.insert(0, {"type": "monitoring_summary", "note": "context_snapshot"})
+    elif not any(s.get("type") == "monitoring_summary" for s in sources):
         sources.insert(0, {"type": "monitoring_summary", "note": "rule_engine"})
 
     logger.info(
-        "copilot_explain: query_len=%d context_keys=%s sources=%d latency_ms=%s",
+        "copilot_explain: generator=%s query_len=%d context_keys=%s sources=%d latency_ms=%s",
+        generator,
         len(query),
         sorted(str(k) for k in (context or {}).keys())[:20],
         len(sources),
@@ -101,4 +133,5 @@ async def explain(body: CopilotExplainRequest | None = None) -> dict:
         "explanation": out["explanation"],
         "sources": sources,
         "generated_at": generated_at,
+        "generator": generator,
     }
