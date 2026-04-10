@@ -29,9 +29,9 @@ api:
   debug: true
   log_level: "DEBUG"
   host: "0.0.0.0"
-  port: 8000
+  port: 8001
   workers: 1
 
 frontend:
-  api_base_url: "http://localhost:8000"
+  api_base_url: "http://localhost:8001"
   page_title: "Time Series Forecasting & Analytics (Local)"

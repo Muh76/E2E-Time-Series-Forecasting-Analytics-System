@@ -11,10 +11,7 @@ Verifies:
 import pytest
 
 from backend.app.services import monitoring_service
-from backend.app.services.monitoring_service import (
-    get_monitoring_summary,
-    update_monitoring_from_backtest,
-)
+from backend.app.services.monitoring_service import get_monitoring_summary, update_monitoring_from_backtest
 
 
 @pytest.fixture(autouse=True)
@@ -23,6 +20,26 @@ def _reset_monitoring_state():
     monitoring_service._monitoring_state = None
     yield
     monitoring_service._monitoring_state = None
+
+
+@pytest.fixture(autouse=True)
+def _neutral_drift(monkeypatch):
+    """Avoid flaky drift scores from real parquet in CI."""
+
+    def neutral(cfg=None):
+        return {
+            "drift_detected": False,
+            "overall_score": 0.0,
+            "threshold": 0.25,
+            "per_feature_scores": {},
+            "ref_sample_size": 100,
+            "current_sample_size": 100,
+        }
+
+    monkeypatch.setattr(
+        "backend.app.services.monitoring_service.compute_feature_drift",
+        neutral,
+    )
 
 
 def _make_backtest_result(
@@ -60,6 +77,11 @@ def _make_backtest_result(
 class TestMonitoringBacktestWiring:
 
     def test_stub_before_backtest(self):
+        """Empty error state matches pre-backtest API shape (no model_loader import)."""
+        monitoring_service._monitoring_state = None
+        monitoring_service.set_monitoring_state(
+            monitoring_service._build_empty_state_from_error("unit test: no metadata"),
+        )
         summary = get_monitoring_summary()
         perf = summary["performance"]
         assert perf["rmse"] == 0.0

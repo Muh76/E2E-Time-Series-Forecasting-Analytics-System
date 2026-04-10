@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field, field_validator
 from backend.app.api.v1.validators import HORIZON_MAX, HORIZON_MIN, get_valid_store_ids
 from backend.app.services.forecasting_service import forecast_store, get_store_last_date
 from backend.app.services.model_loader import get_model_metadata
+from backend.app.services.monitoring_service import record_forecast_activity
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +80,10 @@ async def post_forecast_store(request: Request, body: ForecastRequest) -> Foreca
 
     logger.info(
         "Forecast completed: store_id=%d, horizon=%d, latency_ms=%.1f, model_version=%s",
-        body.store_id, body.horizon, latency_ms, model_version,
+        body.store_id,
+        body.horizon,
+        latency_ms,
+        model_version,
     )
 
     if residual_std > 0:
@@ -92,6 +96,8 @@ async def post_forecast_store(request: Request, body: ForecastRequest) -> Foreca
         for f in forecasts:
             f["confidence_low"] = None
             f["confidence_high"] = None
+
+    record_forecast_activity(body.store_id, body.horizon)
 
     return ForecastResponse(
         store_id=body.store_id,
@@ -132,7 +138,9 @@ async def post_forecast_store_debug(body: ForecastRequest) -> dict:
 
     logger.info(
         "Debug forecast info: store_id=%d, last_date=%s, horizon=%d",
-        body.store_id, last_date, body.horizon,
+        body.store_id,
+        last_date,
+        body.horizon,
     )
 
     return result
