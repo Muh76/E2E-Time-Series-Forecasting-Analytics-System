@@ -39,7 +39,8 @@ def test_compute_aligned_metrics_empty():
 def test_no_record_returns_no_ground_truth():
     r = metrics_service.evaluate_last_forecast_vs_actuals()
     assert r["status"] == "no_ground_truth"
-    assert r["message"] == "Metrics unavailable without actual values"
+    assert r["reason"] == "no_forecast_record"
+    assert "forecast" in r["message"].lower() or "record" in r["message"].lower()
 
 
 def test_evaluate_with_mocked_parquet(tmp_path, monkeypatch):
@@ -61,7 +62,7 @@ def test_evaluate_with_mocked_parquet(tmp_path, monkeypatch):
     pq = tmp_path / "etl_output.parquet"
     df.to_parquet(pq)
 
-    monkeypatch.setattr(metrics_service, "_PARQUET_PATH", pq)
+    monkeypatch.setattr(metrics_service, "_parquet_path", lambda: pq)
     monkeypatch.setattr(metrics_service, "_load_target_column", lambda: "target_cleaned")
 
     r = metrics_service.evaluate_last_forecast_vs_actuals()
@@ -84,8 +85,9 @@ def test_wrong_store_id_returns_no_ground_truth(tmp_path, monkeypatch):
     )
     pq = tmp_path / "etl_output.parquet"
     df.to_parquet(pq)
-    monkeypatch.setattr(metrics_service, "_PARQUET_PATH", pq)
+    monkeypatch.setattr(metrics_service, "_parquet_path", lambda: pq)
     monkeypatch.setattr(metrics_service, "_load_target_column", lambda: "target_cleaned")
 
     r = metrics_service.evaluate_last_forecast_vs_actuals(store_id=999)
     assert r["status"] == "no_ground_truth"
+    assert r["reason"] == "store_mismatch"

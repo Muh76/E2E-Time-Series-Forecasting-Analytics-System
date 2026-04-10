@@ -11,12 +11,12 @@ from __future__ import annotations
 import copy
 import logging
 import math
-import os
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 import yaml
+
+from backend.app.runtime_paths import base_default_config_path, env_config_path
 
 logger = logging.getLogger(__name__)
 
@@ -28,17 +28,13 @@ def compute_feature_drift(config: dict[str, Any] | None = None) -> dict[str, Any
     return _run(config)
 
 
-_ROOT = Path(__file__).resolve().parents[3]
-
-
 def _load_merged_config() -> dict[str, Any]:
-    base_path = _ROOT / "config" / "base" / "default.yaml"
+    base_path = base_default_config_path()
     if not base_path.exists():
         return {}
     with open(base_path) as f:
         config: dict[str, Any] = yaml.safe_load(f) or {}
-    env = os.environ.get("APP_ENV", "local")
-    env_path = _ROOT / "config" / env / "config.yaml"
+    env_path = env_config_path()
     if env_path.exists():
         with open(env_path) as f:
             env_cfg = yaml.safe_load(f) or {}

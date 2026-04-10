@@ -6,7 +6,7 @@ and prints a summary. Uses only the requests library — no pytest.
 
 Usage (server must be running):
     python scripts/smoke_test_api.py
-    python scripts/smoke_test_api.py --base-url http://localhost:8000
+    python scripts/smoke_test_api.py --base-url http://127.0.0.1:8001
 """
 
 import argparse
@@ -22,8 +22,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Smoke test the forecasting API.")
     parser.add_argument(
         "--base-url",
-        default="http://localhost:8000",
-        help="Base URL of the running API server (default: http://localhost:8000)",
+        default="http://127.0.0.1:8001",
+        help="Base URL of the running API server (default: http://127.0.0.1:8001)",
     )
     args = parser.parse_args()
     base = args.base_url.rstrip("/")

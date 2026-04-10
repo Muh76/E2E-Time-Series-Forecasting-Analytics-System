@@ -10,9 +10,11 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from backend.app.runtime_paths import project_root
+
 logger = logging.getLogger(__name__)
 
-# Unified paths (no data/indices/*)
+# Relative defaults under project root (override with E2E_* env; see runtime_paths)
 FAISS_INDEX_PATH = "data/faiss_index.bin"
 CHUNK_METADATA_PATH = "data/chunk_metadata.pkl"
 
@@ -21,11 +23,11 @@ _metadata = None
 
 
 def _resolve_path(relative_path: str, base_dir: Path | None = None) -> Path:
-    """Resolve path relative to project root or given base."""
+    """Resolve path relative to project root (or ``base_dir`` when provided)."""
     path = Path(relative_path)
     if path.is_absolute():
-        return path
-    base = base_dir or Path.cwd()
+        return path.resolve()
+    base = base_dir or project_root()
     return (base / path).resolve()
 
 
@@ -41,6 +43,7 @@ def load_faiss_index(index_path: str | Path | None = None, base_dir: Path | None
         return None
     try:
         import faiss
+
         _index = faiss.read_index(str(path))
         ntotal = _index.ntotal
         logger.info("FAISS index loaded: path=%s, ntotal=%d", path, ntotal)
@@ -62,6 +65,7 @@ def load_chunk_metadata(metadata_path: str | Path | None = None, base_dir: Path 
         return None
     try:
         import pickle
+
         with open(path, "rb") as f:
             _metadata = pickle.load(f)
         # Support list or dict-like (e.g. list of dicts)

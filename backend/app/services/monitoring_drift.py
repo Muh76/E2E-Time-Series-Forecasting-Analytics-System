@@ -8,18 +8,23 @@ from __future__ import annotations
 
 import logging
 import os
-import sys
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 import yaml
 
+from backend.app.runtime_paths import (
+    base_default_config_path,
+    ensure_project_on_sys_path,
+    env_config_path,
+    processed_parquet_path,
+    project_root,
+)
+
 logger = logging.getLogger(__name__)
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
-if str(_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PROJECT_ROOT))
+ensure_project_on_sys_path()
 
 from models.monitoring.drift import DataDriftDetector  # noqa: E402
 
@@ -35,13 +40,12 @@ _PREFERRED_DRIFT_COLS = (
 
 
 def _merged_config() -> dict[str, Any]:
-    base_path = _PROJECT_ROOT / "config" / "base" / "default.yaml"
+    base_path = base_default_config_path()
     if not base_path.exists():
         return {}
     with open(base_path) as f:
         config: dict[str, Any] = yaml.safe_load(f) or {}
-    env = os.environ.get("APP_ENV", "local")
-    env_path = _PROJECT_ROOT / "config" / env / "config.yaml"
+    env_path = env_config_path()
     if env_path.exists():
         with open(env_path) as f:
             env_cfg = yaml.safe_load(f) or {}
@@ -53,12 +57,15 @@ def _merged_config() -> dict[str, Any]:
     return config
 
 
-def processed_parquet_path(config: dict[str, Any]) -> Path:
+def drift_parquet_file(config: dict[str, Any]) -> Path:
+    """Resolved processed parquet for drift (honors ``E2E_PROCESSED_PARQUET_PATH``)."""
+    if os.environ.get("E2E_PROCESSED_PARQUET_PATH", "").strip():
+        return processed_parquet_path()
     data_cfg = config.get("data") or {}
     rel = data_cfg.get("processed_path", "data/processed")
     path = Path(rel)
     if not path.is_absolute():
-        path = _PROJECT_ROOT / path
+        path = project_root() / path
     return path / "etl_output.parquet"
 
 
@@ -83,7 +90,7 @@ def compute_feature_drift(config: dict[str, Any] | None = None) -> dict[str, Any
             "note": "drift checks disabled in config",
         }
 
-    path = processed_parquet_path(cfg)
+    path = drift_parquet_file(cfg)
     if not path.exists():
         logger.warning("Drift skipped: processed parquet not found at %s", path)
         return {

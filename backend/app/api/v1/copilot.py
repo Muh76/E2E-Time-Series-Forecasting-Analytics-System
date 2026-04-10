@@ -5,6 +5,8 @@ POST /api/v1/copilot — forecast series + metrics → summary, insights, confid
 POST /api/v1/copilot/explain — query + optional context; returns markdown explanation.
 """
 
+import logging
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -13,6 +15,8 @@ from pydantic import BaseModel, Field
 
 from backend.app.services.copilot_forecast_insights import build_forecast_insights
 from backend.app.services.copilot_rules import build_rule_based_explanation
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/copilot", tags=["copilot"])
 
@@ -41,7 +45,16 @@ async def copilot_forecast_insights(body: CopilotInsightRequest) -> CopilotInsig
     """
     Rule-based Insight Copilot: trend, volatility, step anomalies; deterministic thresholds.
     """
+    t0 = time.perf_counter()
     out = build_forecast_insights(body.forecast, body.metrics)
+    latency_ms = round((time.perf_counter() - t0) * 1000, 2)
+    logger.info(
+        "copilot_insights: forecast_items=%d metrics_keys=%s confidence=%.4f latency_ms=%s",
+        len(body.forecast),
+        sorted(str(k) for k in body.metrics.keys())[:24],
+        float(out.get("confidence", 0.0)),
+        latency_ms,
+    )
     return CopilotInsightResponse(**out)
 
 
@@ -60,11 +73,21 @@ async def explain(body: CopilotExplainRequest | None = None) -> dict:
     query = body.query or ""
     context = body.context or {}
 
+    t0 = time.perf_counter()
     explanation, sources = build_rule_based_explanation(query, context)
+    latency_ms = round((time.perf_counter() - t0) * 1000, 2)
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     if not any(s.get("type") == "monitoring_summary" for s in sources):
         sources.insert(0, {"type": "monitoring_summary", "note": "rule_engine"})
+
+    logger.info(
+        "copilot_explain: query_len=%d context_keys=%s sources=%d latency_ms=%s",
+        len(query),
+        sorted(str(k) for k in (context or {}).keys())[:20],
+        len(sources),
+        latency_ms,
+    )
 
     return {
         "explanation": explanation,
