@@ -138,13 +138,15 @@ def _mock_forecasts(
     forecasts = []
     for sid in series_ids:
         base = 100.0
-        forecasts.append({
-            "series_id": sid,
-            "model_version": "v1.0.0",
-            "frequency": frequency,
-            "point_forecast": [base + i * 0.5 for i in range(horizon_steps)],
-            "steps": list(range(1, horizon_steps + 1)),
-        })
+        forecasts.append(
+            {
+                "series_id": sid,
+                "model_version": "v1.0.0",
+                "frequency": frequency,
+                "point_forecast": [base + i * 0.5 for i in range(horizon_steps)],
+                "steps": list(range(1, horizon_steps + 1)),
+            }
+        )
     return {
         "job_id": "mock_gen_001",
         "status": "completed",
@@ -164,8 +166,10 @@ def normalize_monitoring_summary(raw_summary: dict[str, Any] | None) -> dict[str
         raw_summary = {}
 
     model_info = raw_summary.get("model_info") or {}
-    model_name = model_info.get("model_name") or raw_summary.get("model_name") or ""
-    model_version = model_info.get("model_version") or raw_summary.get("model_version") or ""
+    model_name = model_info.get("model_name") or raw_summary.get("model_name") or "lightgbm"
+    model_version = (
+        model_info.get("model_version") or model_info.get("version") or raw_summary.get("model_version") or ""
+    )
 
     # Flatten alerts to top-level with defaults
     alerts = raw_summary.get("alerts")
@@ -191,11 +195,12 @@ def normalize_monitoring_summary(raw_summary: dict[str, Any] | None) -> dict[str
         "drift_threshold": thresholds.get("drift_threshold", 0.25),
     }
 
-    # Preserve these with fallbacks
-    performance = raw_summary.get("performance") or {}
-    drift = raw_summary.get("drift") or {}
+    # Preserve these with fallbacks (API returns flat performance.*)
+    performance = dict(raw_summary.get("performance") or {})
+    drift = dict(raw_summary.get("drift") or {})
     rolling_series = raw_summary.get("rolling_series") or {}
     overall_status = raw_summary.get("overall_status") or raw_summary.get("status") or ""
+    recent_activity = raw_summary.get("recent_activity") or {}
 
     # Build normalized summary; preserve other keys (e.g. as_of, pipeline) for compatibility
     normalized: dict[str, Any] = {
@@ -207,6 +212,7 @@ def normalize_monitoring_summary(raw_summary: dict[str, Any] | None) -> dict[str
         "overall_status": overall_status,
         "alerts": alerts,
         "thresholds": thresholds,
+        "recent_activity": recent_activity,
     }
     skip = set(normalized.keys()) | {"model_info", "status"}
     for k, v in raw_summary.items():
@@ -215,7 +221,7 @@ def normalize_monitoring_summary(raw_summary: dict[str, Any] | None) -> dict[str
     return normalized
 
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=15)
 def _cached_monitoring_summary_api(
     model_version: str | None,
     since: str | None,
@@ -256,35 +262,32 @@ def get_monitoring_summary(
 
 
 def _mock_monitoring_summary() -> dict[str, Any]:
+    """Offline fallback only — no fabricated metrics; empty series."""
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-    today = datetime.now(timezone.utc).date()
-    # Rolling series for charts (last 7 days)
-    rolling_mae = [
-        {"date": (today - timedelta(days=i)).isoformat(), "value": 2.1 + (i % 3) * 0.3}
-        for i in range(6, -1, -1)
-    ]
-    rolling_mape = [
-        {"date": (today - timedelta(days=i)).isoformat(), "value": 3.5 + (i % 3) * 0.5}
-        for i in range(6, -1, -1)
-    ]
-    per_feature = {"lag_1": 0.12, "lag_7": 0.18, "rolling_7": 0.28, "day_of_week": 0.08}
     raw = {
-        "model_name": "LightGBM",
-        "model_version": "v1.0.0",
+        "model_info": {"model_name": "lightgbm", "model_version": "unknown"},
+        "model_version": "unknown",
         "as_of": now,
-        "performance": {"mae": 2.34, "rmse": 3.01, "mape": 0.042, "sample_size": 120},
+        "performance": {
+            "mae": None,
+            "rmse": None,
+            "mape": None,
+            "sample_size": 0,
+            "source": "offline",
+        },
         "drift": {
             "status": "ok",
             "last_checked": now,
             "indicators": [],
-            "per_feature_scores": per_feature,
-            "overall_score": 0.18,
+            "per_feature_scores": {},
+            "overall_score": None,
             "threshold": 0.25,
         },
-        "pipeline": {"last_training": now, "last_etl": now, "status": "ok"},
-        "rolling_series": {"mae": rolling_mae, "mape": rolling_mape},
+        "pipeline": {"last_training": None, "last_etl": None, "status": "unknown"},
+        "rolling_series": {"mae": [], "mape": []},
         "thresholds": {"mae_alert": 15.0, "mape_alert": 0.20, "drift_threshold": 0.25},
         "alerts": {"mae": False, "mape": False, "drift": False},
+        "recent_activity": {},
     }
     return normalize_monitoring_summary(raw)
 
@@ -349,10 +352,7 @@ def parse_api_error(exc: requests.HTTPError) -> list[dict[str, str]]:
 
     detail = body.get("detail")
     if isinstance(detail, list):
-        return [
-            {"field": item.get("field", "unknown"), "message": item.get("message", str(item))}
-            for item in detail
-        ]
+        return [{"field": item.get("field", "unknown"), "message": item.get("message", str(item))} for item in detail]
     if isinstance(detail, str):
         return [{"field": "unknown", "message": detail}]
     return [{"field": "unknown", "message": str(body)}]
@@ -420,18 +420,22 @@ def copilot_explain(
 def _mock_copilot_explain(query: str, context: dict[str, Any] | None) -> dict[str, Any]:
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     perf = (context or {}).get("monitoring_summary", {}).get("performance", {}) or {}
-    mae = perf.get("mae", 0)
-    mape = perf.get("mape", 0)
-    mape_pct = mape * 100 if mape and mape < 1 else (mape or 0)
+    mae = perf.get("mae")
+    mape = perf.get("mape")
+    if mape is None:
+        mape_disp = "n/a"
+    elif 0 <= mape < 1:
+        mape_disp = f"{mape * 100:.1f}%"
+    else:
+        mape_disp = f"{mape:.1f}%"
     return {
         "explanation": (
-            f"You asked: \"{query}\"\n\n"
-            "**Mock response** (Copilot endpoint not available): "
-            f"Current performance: MAE={mae:.2f}, MAPE={mape_pct:.1f}%. "
-            "The copilot explains forecasts and metrics using precomputed data; it does not perform prediction. "
-            "Connect the backend with LLM to get real explanations."
+            f'You asked: "{query}"\n\n'
+            "**Offline mode:** the API is unreachable. "
+            f"Context snapshot — MAE={mae}, MAPE={mape_disp}. "
+            "Start the FastAPI backend and ensure the sidebar API URL is correct."
         ),
-        "sources": [{"type": "mock", "note": "Backend copilot unavailable"}],
+        "sources": [{"type": "offline", "note": "Backend unreachable"}],
         "generated_at": now,
     }
 
@@ -474,8 +478,7 @@ def _mock_monitoring_series(metric: str, start_date: str, end_date: str) -> dict
     delta = (end - start).days + 1
     base = 2.3 if metric == "mae" else 0.04
     data = [
-        {"date": (start + timedelta(days=i)).isoformat(), "value": base + (i % 5) * 0.1}
-        for i in range(min(delta, 14))
+        {"date": (start + timedelta(days=i)).isoformat(), "value": base + (i % 5) * 0.1} for i in range(min(delta, 14))
     ]
     return {"metric": metric, "model_version": "v1.0.0", "granularity": "daily", "data": data}
 
@@ -535,14 +538,16 @@ def _mock_metrics(
             d = (start + timedelta(days=i)).isoformat()
             actual = base + (i % 7) * 2.0
             forecast = actual + 0.5
-            data.append({
-                "series_id": sid,
-                "date": d,
-                "actual": round(actual, 2),
-                "forecast": round(forecast, 2),
-                "error": round(forecast - actual, 2),
-                "model_version": "v1.0.0",
-            })
+            data.append(
+                {
+                    "series_id": sid,
+                    "date": d,
+                    "actual": round(actual, 2),
+                    "forecast": round(forecast, 2),
+                    "error": round(forecast - actual, 2),
+                    "model_version": "v1.0.0",
+                }
+            )
     return {
         "data": data,
         "meta": {"series_ids": series_ids, "start_date": start_date, "end_date": end_date, "count": len(data)},

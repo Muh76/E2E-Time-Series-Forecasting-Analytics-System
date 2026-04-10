@@ -12,6 +12,7 @@ from backend.app.api.v1.forecast import router as forecast_router
 from backend.app.api.v1.model_info import router as model_info_router
 from backend.app.api.v1.monitoring import router as monitoring_router
 from backend.app.services.model_loader import load_baseline_model, load_feature_columns, load_primary_model
+from backend.app.services.monitoring_service import initialize_monitoring_state
 
 logger = logging.getLogger(__name__)
 
@@ -19,20 +20,20 @@ app = FastAPI(title="E2E Time Series Forecasting API")
 
 
 @app.exception_handler(RequestValidationError)
-async def validation_exception_handler(
-    request: Request, exc: RequestValidationError
-) -> JSONResponse:
+async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
     """Return structured 422 errors with per-field messages."""
     errors = []
     for err in exc.errors():
         loc = err.get("loc", ())
         field = ".".join(str(part) for part in loc if part != "body")
-        errors.append({
-            "field": field or "unknown",
-            "message": err.get("msg", "Validation error"),
-            "type": err.get("type", "value_error"),
-            "input": err.get("input"),
-        })
+        errors.append(
+            {
+                "field": field or "unknown",
+                "message": err.get("msg", "Validation error"),
+                "type": err.get("type", "value_error"),
+                "input": err.get("input"),
+            }
+        )
     logger.warning("Request validation failed: %s", errors)
     return JSONResponse(status_code=422, content={"detail": errors})
 
@@ -44,6 +45,10 @@ async def startup_load_models() -> None:
     app.state.baseline_model = load_baseline_model()
     app.state.feature_columns = load_feature_columns()
     logger.info("All models and feature columns loaded and attached to app.state.")
+    try:
+        initialize_monitoring_state()
+    except Exception as exc:
+        logger.warning("Monitoring initialization failed (non-fatal): %s", exc)
 
 
 @app.get("/health/live")

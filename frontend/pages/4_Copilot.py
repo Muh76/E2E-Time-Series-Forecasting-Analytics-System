@@ -1,10 +1,9 @@
 """
-Insight Copilot — AI-assisted explanations from monitoring and drift results.
-No forecasting logic; no raw data sent to LLM. Uses mock when API unavailable.
+Insight Copilot — rule-based explanations from monitoring and drift context.
+No forecasting logic; uses backend POST /api/v1/copilot/explain when available.
 """
 
 import streamlit as st
-
 from components.api import copilot_explain, get_monitoring_summary
 from components.ui import LOADING_COPIOT_MESSAGE, render_warning, with_loading
 
@@ -37,6 +36,9 @@ def main() -> None:
             "monitoring_summary": monitoring_summary,
             "performance": monitoring_summary.get("performance") or {},
             "drift": monitoring_summary.get("drift") or {},
+            "alerts": alerts,
+            "overall_status": monitoring_summary.get("overall_status"),
+            "recent_activity": monitoring_summary.get("recent_activity") or {},
             "alert_context": {
                 "alerts": alerts,
                 "timestamp": alert_context.get("timestamp"),
@@ -80,12 +82,15 @@ def main() -> None:
         if not query or not query.strip():
             render_warning("Enter a question to continue.")
         else:
+
             def _fetch_and_explain():
                 monitoring_summary = _summary_only(get_monitoring_summary())
                 context = {
                     "monitoring_summary": monitoring_summary,
                     "performance": monitoring_summary.get("performance") or {},
                     "drift": monitoring_summary.get("drift") or {},
+                    "overall_status": monitoring_summary.get("overall_status"),
+                    "recent_activity": monitoring_summary.get("recent_activity") or {},
                 }
                 return copilot_explain(query=query.strip(), context=context)
 

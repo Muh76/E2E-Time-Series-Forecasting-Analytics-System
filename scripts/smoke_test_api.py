@@ -97,6 +97,37 @@ def main() -> None:
             f"got {body.get('recursive_steps')}",
         )
 
+    # 4. GET /api/v1/monitoring/summary
+    print("\n4. GET /api/v1/monitoring/summary")
+    r = requests.get(f"{base}/api/v1/monitoring/summary", timeout=10)
+    check("status 200", r.status_code == 200, f"got {r.status_code}")
+    if r.status_code == 200:
+        body = r.json()
+        check("has performance", "performance" in body)
+        check("has drift", "drift" in body)
+        check("performance has mae", "mae" in body.get("performance", {}))
+
+    # 5. GET /api/v1/monitoring/metrics
+    print("\n5. GET /api/v1/monitoring/metrics")
+    r = requests.get(f"{base}/api/v1/monitoring/metrics", timeout=10)
+    check("status 200", r.status_code == 200, f"got {r.status_code}")
+    if r.status_code == 200:
+        body = r.json()
+        check("has primary_metrics", "primary_metrics" in body)
+
+    # 6. POST /api/v1/copilot/explain
+    print("\n6. POST /api/v1/copilot/explain")
+    r = requests.post(
+        f"{base}/api/v1/copilot/explain",
+        json={"query": "Summarize current model performance and drift."},
+        timeout=30,
+    )
+    check("status 200", r.status_code == 200, f"got {r.status_code}")
+    if r.status_code == 200:
+        body = r.json()
+        check("has explanation", "explanation" in body and len(body.get("explanation", "")) > 0)
+        check("has sources", "sources" in body)
+
     # Summary
     total = passed + failed
     print(f"\n{'='*40}")
