@@ -67,6 +67,8 @@ def execute_store_forecast(
 
 def metrics_context_for_copilot(eval_result: dict[str, Any]) -> dict[str, Any]:
     """Subset of evaluation payload useful for rule-based copilot narrative."""
+    if "current" in eval_result:
+        eval_result = eval_result["current"]
     if eval_result.get("status") == "ok":
         out: dict[str, Any] = {}
         for k in ("mae", "rmse", "mape", "n_samples", "evaluated_dates"):

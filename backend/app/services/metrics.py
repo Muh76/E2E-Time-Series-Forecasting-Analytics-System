@@ -20,6 +20,7 @@ import pandas as pd
 import yaml
 
 from backend.app.runtime_paths import base_default_config_path, ensure_project_on_sys_path, processed_parquet_path
+from backend.app.services import rolling_performance
 from backend.services.drift import compute_distribution_drift
 from models.evaluation.metrics import compute_metrics
 
@@ -321,4 +322,8 @@ def evaluate_last_forecast_vs_actuals(
         computed["rmse"],
         computed["mape"],
     )
+    try:
+        rolling_performance.append_evaluation_errors(sid, dates_out, y_true_list, y_pred_list)
+    except Exception as exc:
+        logger.warning("rolling_performance: append failed (non-fatal): %s", exc)
     return result

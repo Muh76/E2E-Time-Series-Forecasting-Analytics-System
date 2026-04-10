@@ -78,3 +78,11 @@ def chunk_metadata_file() -> Path:
     """Chunk metadata pickle for RAG (override with ``E2E_CHUNK_METADATA_PATH``)."""
     rel = os.environ.get("E2E_CHUNK_METADATA_PATH", "data/chunk_metadata.pkl").strip()
     return resolve_under_root(rel)
+
+
+def rolling_performance_json_path() -> Path:
+    """JSON store for per-date forecast error history (rolling monitoring)."""
+    p = os.environ.get("E2E_ROLLING_PERFORMANCE_JSON", "").strip()
+    if p:
+        return Path(p).expanduser().resolve()
+    return project_root() / "data" / "monitoring" / "rolling_performance.json"

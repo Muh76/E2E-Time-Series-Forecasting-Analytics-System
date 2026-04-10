@@ -9,6 +9,7 @@ from components.api import (
     describe_request_error,
     forecast_store,
     get_forecast_evaluation_metrics,
+    metrics_response_current,
     parse_api_error,
 )
 from components.metrics import format_float, format_mape
@@ -106,7 +107,7 @@ def main() -> None:
             except Exception as exc:
                 errors["metrics"] = str(exc)
 
-            metrics_for_copilot = st.session_state.get("fc_metrics") or {}
+            metrics_for_copilot = metrics_response_current(st.session_state.get("fc_metrics") or {})
             try:
                 with st.spinner("Generating insights…"):
                     copilot = copilot_forecast_insights(forecasts, metrics_for_copilot)
@@ -204,7 +205,7 @@ def main() -> None:
 
     metrics = st.session_state.get("fc_metrics")
     if metrics is not None:
-        _render_evaluation_metrics(metrics)
+        _render_evaluation_metrics(metrics_response_current(metrics))
 
     copilot = st.session_state.get("fc_copilot")
     if copilot is not None:

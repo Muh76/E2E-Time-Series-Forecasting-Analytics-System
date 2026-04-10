@@ -17,14 +17,10 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from backend.app.runtime_paths import processed_parquet_path
 from backend.app.services.model_loader import get_model_metadata
 
-from .forecasting_service import (
-    _PARQUET_PATH,
-    _MIN_HISTORY_ROWS,
-    _get_inference_config,
-    _run_feature_pipeline,
-)
+from .forecasting_service import _MIN_HISTORY_ROWS, _get_inference_config, _run_feature_pipeline
 
 logger = logging.getLogger(__name__)
 
@@ -64,13 +60,13 @@ def backtest_store(
     if n_splits < 1:
         raise ValueError(f"n_splits must be >= 1, got {n_splits}.")
 
-    if not _PARQUET_PATH.exists():
+    pq = processed_parquet_path()
+    if not pq.exists():
         raise RuntimeError(
-            f"Processed dataset not found: {_PARQUET_PATH}. "
-            "Run the ETL pipeline to generate it."
+            f"Processed dataset not found: {pq}. " "Run the ETL pipeline or set E2E_PROCESSED_PARQUET_PATH."
         )
 
-    df = pd.read_parquet(_PARQUET_PATH)
+    df = pd.read_parquet(pq)
     store_df = df[df["store_id"] == store_id].copy()
     if store_df.empty:
         raise ValueError(f"store_id={store_id} not found in dataset.")
@@ -98,7 +94,8 @@ def backtest_store(
 
     logger.info(
         "Running feature pipeline for backtest: store_id=%d, rows=%d",
-        store_id, len(store_df),
+        store_id,
+        len(store_df),
     )
     featured_df = _run_feature_pipeline(store_df, config)
 
@@ -121,7 +118,8 @@ def backtest_store(
     if actual_splits < n_splits:
         logger.warning(
             "Reduced n_splits from %d to %d (limited by available date range).",
-            n_splits, actual_splits,
+            n_splits,
+            actual_splits,
         )
 
     # Space cutoffs evenly across the available range
@@ -129,9 +127,7 @@ def backtest_store(
         cutoff_indices = [latest_cutoff_idx]
     else:
         step = available_range / (actual_splits - 1)
-        cutoff_indices = [
-            earliest_cutoff_idx + round(i * step) for i in range(actual_splits)
-        ]
+        cutoff_indices = [earliest_cutoff_idx + round(i * step) for i in range(actual_splits)]
 
     cutoff_dates = [unique_dates.iloc[idx] for idx in cutoff_indices]
 
@@ -163,7 +159,7 @@ def backtest_store(
 
         residuals = y_true - y_pred
         mae = float(np.mean(np.abs(residuals)))
-        rmse = float(np.sqrt(np.mean(residuals ** 2)))
+        rmse = float(np.sqrt(np.mean(residuals**2)))
 
         nonzero = y_true != 0
         if nonzero.any():
@@ -171,18 +167,25 @@ def backtest_store(
         else:
             mape = float("nan")
 
-        splits.append({
-            "split": i + 1,
-            "cutoff_date": str(cutoff_date)[:10],
-            "horizon": int(len(merged)),
-            "rmse": round(rmse, 4),
-            "mae": round(mae, 4),
-            "mape": round(mape, 2),
-        })
+        splits.append(
+            {
+                "split": i + 1,
+                "cutoff_date": str(cutoff_date)[:10],
+                "horizon": int(len(merged)),
+                "rmse": round(rmse, 4),
+                "mae": round(mae, 4),
+                "mape": round(mape, 2),
+            }
+        )
 
         logger.info(
             "Backtest split %d/%d: cutoff=%s, RMSE=%.2f, MAE=%.2f, MAPE=%.2f%%",
-            i + 1, actual_splits, str(cutoff_date)[:10], rmse, mae, mape,
+            i + 1,
+            actual_splits,
+            str(cutoff_date)[:10],
+            rmse,
+            mae,
+            mape,
         )
 
     if not splits:
@@ -195,7 +198,11 @@ def backtest_store(
 
     logger.info(
         "Backtest complete: store_id=%d, splits=%d, avg_RMSE=%.2f, avg_MAE=%.2f, avg_MAPE=%.2f%%",
-        store_id, len(splits), avg_rmse, avg_mae, avg_mape,
+        store_id,
+        len(splits),
+        avg_rmse,
+        avg_mae,
+        avg_mape,
     )
 
     return {

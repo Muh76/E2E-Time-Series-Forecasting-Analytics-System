@@ -13,8 +13,8 @@ from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from backend.app.services.copilot_explain import build_structured_copilot_response
 from backend.app.services.copilot_forecast_insights import build_forecast_insights
-from backend.app.services.copilot_rules import build_rule_based_explanation
 
 logger = logging.getLogger(__name__)
 
@@ -74,9 +74,9 @@ async def explain(body: CopilotExplainRequest | None = None) -> dict:
     context = body.context or {}
 
     t0 = time.perf_counter()
-    explanation, sources = build_rule_based_explanation(query, context)
+    out = build_structured_copilot_response(query, context)
     latency_ms = round((time.perf_counter() - t0) * 1000, 2)
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    sources = list(out["sources"])
 
     if not any(s.get("type") == "monitoring_summary" for s in sources):
         sources.insert(0, {"type": "monitoring_summary", "note": "rule_engine"})
@@ -89,8 +89,16 @@ async def explain(body: CopilotExplainRequest | None = None) -> dict:
         latency_ms,
     )
 
+    generated_at = out.get("generated_at") or datetime.now(timezone.utc).isoformat()
+    if isinstance(generated_at, str) and generated_at.endswith("+00:00"):
+        generated_at = generated_at.replace("+00:00", "Z")
+
     return {
-        "explanation": explanation,
+        "answer": out["answer"],
+        "reasoning": out["reasoning"],
+        "confidence": out["confidence"],
+        "intents": out["intents"],
+        "explanation": out["explanation"],
         "sources": sources,
-        "generated_at": now,
+        "generated_at": generated_at,
     }

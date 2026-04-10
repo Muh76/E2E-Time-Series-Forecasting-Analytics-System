@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 import requests
 import streamlit as st
-from components.api import describe_request_error, get_monitoring_summary
+from components.api import describe_request_error, get_forecast_evaluation_metrics, get_monitoring_summary
 from components.charts import render_drift_bar_chart, render_rolling_metric_chart
 from components.ui import chart_loading_placeholder, render_empty, render_error, with_loading
 
@@ -102,42 +102,90 @@ def main() -> None:
             }
             st.switch_page("pages/4_Copilot.py")
 
-    # --- Section 1: Performance Monitoring ---
+    # --- Section 1: Performance Monitoring (rolling from GET /api/v1/metrics) ---
     st.markdown("---")
-    st.subheader("1. Performance Monitoring")
-    rolling = summary.get("rolling_series") or {}
-    rolling_mae = rolling.get("mae") or []
-    rolling_mape = rolling.get("mape") or []
+    st.subheader("1. Performance monitoring")
+    st.caption(
+        "Rolling series from stored forecast-vs-actual errors (run forecasts with overlapping actuals to populate)."
+    )
+    rc1, rc2 = st.columns(2)
+    with rc1:
+        roll_store = st.number_input(
+            "Store ID (rolling)",
+            min_value=1,
+            value=1,
+            step=1,
+            key="mon_roll_store",
+            help="Filter rolling history to this store.",
+        )
+    with rc2:
+        roll_window = st.slider(
+            "Rolling window",
+            min_value=2,
+            max_value=30,
+            value=7,
+            key="mon_roll_window",
+        )
+
+    rolling_mae_dates: list[str] = []
+    rolling_mae_vals: list[float] = []
+    rolling_mape_vals: list[float] = []
+    try:
+        mpack = get_forecast_evaluation_metrics(int(roll_store), window=int(roll_window))
+        rser = mpack.get("rolling") or {}
+        rolling_mae_dates = list(rser.get("timestamps") or [])
+        rolling_mae_vals = [float(x) for x in (rser.get("mae") or [])]
+        rolling_mape_vals = [float(x) for x in (rser.get("mape") or [])]
+    except requests.RequestException as exc:
+        st.warning(describe_request_error(exc))
 
     col1, col2 = st.columns(2)
     with col1:
-        if rolling_mae:
-            dates = [r["date"] for r in rolling_mae]
-            values = [r["value"] for r in rolling_mae]
+        if rolling_mae_dates and rolling_mae_vals and len(rolling_mae_dates) == len(rolling_mae_vals):
             render_rolling_metric_chart(
-                dates=dates,
-                values=values,
+                dates=rolling_mae_dates,
+                values=rolling_mae_vals,
                 threshold=mae_alert,
                 metric_name="MAE",
-                title="Rolling MAE",
+                title=f"Rolling MAE (window={roll_window})",
                 threshold_label=f"Alert ({mae_alert})",
             )
         else:
-            render_empty("No rolling MAE data available.")
+            legacy = (summary.get("rolling_series") or {}).get("mae") or []
+            if legacy:
+                render_rolling_metric_chart(
+                    dates=[r["date"] for r in legacy],
+                    values=[r["value"] for r in legacy],
+                    threshold=mae_alert,
+                    metric_name="MAE",
+                    title="Rolling MAE (monitoring summary)",
+                    threshold_label=f"Alert ({mae_alert})",
+                )
+            else:
+                render_empty("No rolling MAE data yet — generate forecasts with evaluable dates.")
     with col2:
-        if rolling_mape:
-            dates = [r["date"] for r in rolling_mape]
-            values = [r["value"] for r in rolling_mape]
+        if rolling_mae_dates and rolling_mape_vals and len(rolling_mae_dates) == len(rolling_mape_vals):
             render_rolling_metric_chart(
-                dates=dates,
-                values=values,
+                dates=rolling_mae_dates,
+                values=rolling_mape_vals,
                 threshold=mape_alert,
                 metric_name="MAPE (%)",
-                title="Rolling MAPE",
+                title=f"Rolling MAPE (window={roll_window})",
                 threshold_label=f"Alert ({mape_alert}%)",
             )
         else:
-            render_empty("No rolling MAPE data available.")
+            legacy_m = (summary.get("rolling_series") or {}).get("mape") or []
+            if legacy_m:
+                render_rolling_metric_chart(
+                    dates=[r["date"] for r in legacy_m],
+                    values=[r["value"] for r in legacy_m],
+                    threshold=mape_alert,
+                    metric_name="MAPE (%)",
+                    title="Rolling MAPE (monitoring summary)",
+                    threshold_label=f"Alert ({mape_alert}%)",
+                )
+            else:
+                render_empty("No rolling MAPE data yet — generate forecasts with evaluable dates.")
 
     # --- Section 2: Drift Monitoring ---
     st.markdown("---")
