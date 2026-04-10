@@ -14,15 +14,13 @@ Expected artifact paths:
 
 import json
 import logging
-from pathlib import Path
 from typing import Any
 
 import joblib
 
-logger = logging.getLogger(__name__)
+from backend.app.runtime_paths import artifacts_models_dir
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
-_ARTIFACTS_DIR = _PROJECT_ROOT / "artifacts" / "models"
+logger = logging.getLogger(__name__)
 
 _primary_model: Any = None
 _baseline_model: Any = None
@@ -38,11 +36,10 @@ def load_primary_model() -> Any:
         RuntimeError: If the artifact file does not exist.
     """
     global _primary_model
-    artifact_path = _ARTIFACTS_DIR / "primary_lightgbm.joblib"
+    artifact_path = artifacts_models_dir() / "primary_lightgbm.joblib"
     if not artifact_path.exists():
         raise RuntimeError(
-            f"Primary model artifact not found: {artifact_path}. "
-            "Run training (scripts/train.py) to generate it."
+            f"Primary model artifact not found: {artifact_path}. " "Run training (scripts/train.py) to generate it."
         )
     _primary_model = joblib.load(artifact_path)
     logger.info("Primary model loaded successfully from %s", artifact_path)
@@ -57,11 +54,10 @@ def load_baseline_model() -> Any:
         RuntimeError: If the artifact file does not exist.
     """
     global _baseline_model
-    artifact_path = _ARTIFACTS_DIR / "baseline_seasonal_naive.joblib"
+    artifact_path = artifacts_models_dir() / "baseline_seasonal_naive.joblib"
     if not artifact_path.exists():
         raise RuntimeError(
-            f"Baseline model artifact not found: {artifact_path}. "
-            "Run training (scripts/train.py) to generate it."
+            f"Baseline model artifact not found: {artifact_path}. " "Run training (scripts/train.py) to generate it."
         )
     _baseline_model = joblib.load(artifact_path)
     logger.info("Baseline model loaded successfully from %s", artifact_path)
@@ -80,17 +76,17 @@ def load_feature_columns() -> list[str]:
         RuntimeError: If the artifact file does not exist.
     """
     global _feature_columns
-    artifact_path = _ARTIFACTS_DIR / "feature_columns.json"
+    artifact_path = artifacts_models_dir() / "feature_columns.json"
     if not artifact_path.exists():
         raise RuntimeError(
-            f"Feature columns artifact not found: {artifact_path}. "
-            "Run training (scripts/train.py) to generate it."
+            f"Feature columns artifact not found: {artifact_path}. " "Run training (scripts/train.py) to generate it."
         )
     with artifact_path.open() as f:
         _feature_columns = json.load(f)
     logger.info(
         "Feature columns loaded successfully (%d columns) from %s",
-        len(_feature_columns), artifact_path,
+        len(_feature_columns),
+        artifact_path,
     )
     return _feature_columns
 
@@ -104,8 +100,7 @@ def get_primary_model() -> Any:
     """
     if _primary_model is None:
         raise RuntimeError(
-            "Primary model has not been loaded. "
-            "Ensure load_primary_model() is called at application startup."
+            "Primary model has not been loaded. " "Ensure load_primary_model() is called at application startup."
         )
     return _primary_model
 
@@ -119,8 +114,7 @@ def get_baseline_model() -> Any:
     """
     if _baseline_model is None:
         raise RuntimeError(
-            "Baseline model has not been loaded. "
-            "Ensure load_baseline_model() is called at application startup."
+            "Baseline model has not been loaded. " "Ensure load_baseline_model() is called at application startup."
         )
     return _baseline_model
 
@@ -132,11 +126,10 @@ def get_model_metadata() -> dict[str, Any]:
     Raises:
         RuntimeError: If the metadata artifact does not exist.
     """
-    metadata_path = _ARTIFACTS_DIR / "model_metadata.json"
+    metadata_path = artifacts_models_dir() / "model_metadata.json"
     if not metadata_path.exists():
         raise RuntimeError(
-            f"Model metadata not found: {metadata_path}. "
-            "Run training (scripts/train.py) to generate it."
+            f"Model metadata not found: {metadata_path}. " "Run training (scripts/train.py) to generate it."
         )
     with metadata_path.open() as f:
         metadata = json.load(f)
@@ -153,11 +146,10 @@ def get_metrics() -> dict[str, Any]:
     """
     global _metrics
     if _metrics is None:
-        metrics_path = _ARTIFACTS_DIR / "metrics.json"
+        metrics_path = artifacts_models_dir() / "metrics.json"
         if not metrics_path.exists():
             raise RuntimeError(
-                f"Metrics artifact not found: {metrics_path}. "
-                "Run training (scripts/train.py) to generate it."
+                f"Metrics artifact not found: {metrics_path}. " "Run training (scripts/train.py) to generate it."
             )
         with metrics_path.open() as f:
             _metrics = json.load(f)

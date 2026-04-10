@@ -77,10 +77,12 @@ async def post_predict(
         copilot_out = CopilotInsightResponse(**built)
 
     logger.info(
-        "Predict pipeline: store_id=%d horizon=%d latency_ms=%.1f include_insights=%s model_version=%s",
+        "predict_pipeline: store_id=%d horizon=%d forecast_ms=%.1f metrics_status=%s "
+        "include_insights=%s model_version=%s",
         body.store_id,
         body.horizon,
         latency_ms,
+        metrics.get("status"),
         include_insights,
         model_version,
     )

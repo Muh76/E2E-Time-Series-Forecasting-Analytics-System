@@ -42,6 +42,9 @@ def _render_evaluation_metrics(metrics: dict) -> None:
             )
     else:
         msg = metrics.get("message") or "Metrics are not available for this forecast."
+        reason = metrics.get("reason")
+        if reason:
+            st.caption(f"Reason: `{reason}`")
         render_warning(msg)
         st.caption("This is normal when forecast dates do not overlap processed actuals in the dataset.")
 

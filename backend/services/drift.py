@@ -18,11 +18,9 @@ import numpy as np
 import pandas as pd
 import yaml
 
-logger = logging.getLogger(__name__)
+from backend.app.runtime_paths import base_default_config_path, processed_parquet_path
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[2]
-_PARQUET_DEFAULT = _PROJECT_ROOT / "data" / "processed" / "etl_output.parquet"
-_CONFIG_DEFAULT = _PROJECT_ROOT / "config" / "base" / "default.yaml"
+logger = logging.getLogger(__name__)
 
 try:
     from scipy import stats as scipy_stats
@@ -125,8 +123,8 @@ def compute_distribution_drift(
         ``{"drift_score": float, "status": "low"|"medium"|"high"}`` plus optional
         ``ks_used`` (bool) and ``n_features`` (int), or ``None`` if data is insufficient.
     """
-    pq = parquet_path or _PARQUET_DEFAULT
-    cfg_path = config_path or _CONFIG_DEFAULT
+    pq = parquet_path or processed_parquet_path()
+    cfg_path = config_path or base_default_config_path()
 
     if not pq.exists():
         logger.warning("Drift: parquet not found at %s", pq)

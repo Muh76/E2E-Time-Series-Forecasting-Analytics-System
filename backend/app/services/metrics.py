@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import logging
 import math
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TypedDict
@@ -20,25 +19,29 @@ import numpy as np
 import pandas as pd
 import yaml
 
+from backend.app.runtime_paths import base_default_config_path, ensure_project_on_sys_path, processed_parquet_path
 from backend.services.drift import compute_distribution_drift
 from models.evaluation.metrics import compute_metrics
 
 logger = logging.getLogger(__name__)
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
-_PARQUET_PATH = _PROJECT_ROOT / "data" / "processed" / "etl_output.parquet"
-_CONFIG_PATH = _PROJECT_ROOT / "config" / "base" / "default.yaml"
+ensure_project_on_sys_path()
 
-if str(_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PROJECT_ROOT))
+
+def _parquet_path() -> Path:
+    return processed_parquet_path()
+
+
+def _config_path() -> Path:
+    return base_default_config_path()
+
 
 # Last forecast from POST /forecast/store or POST /predict (for evaluation vs actuals)
 _last_forecast_record: dict[str, Any] | None = None
 
-NO_GROUND_TRUTH: dict[str, str] = {
-    "status": "no_ground_truth",
-    "message": "Metrics unavailable without actual values",
-}
+
+def _no_ground_truth(reason: str, message: str) -> dict[str, str]:
+    return {"status": "no_ground_truth", "reason": reason, "message": message}
 
 
 class DriftPayload(TypedDict):
@@ -60,9 +63,10 @@ class MetricsOkResponse(TypedDict, total=False):
 
 
 def _load_target_column() -> str:
-    if not _CONFIG_PATH.exists():
+    cfg_path = _config_path()
+    if not cfg_path.exists():
         return "target_cleaned"
-    with _CONFIG_PATH.open() as f:
+    with cfg_path.open() as f:
         cfg = yaml.safe_load(f) or {}
     fe = cfg.get("feature_engineering") or {}
     return str(fe.get("target_column", "target_cleaned"))
@@ -183,48 +187,73 @@ def evaluate_last_forecast_vs_actuals(
     If ``store_id`` is set, it must match the recorded forecast's store.
 
     Returns:
-        MetricsOkResponse with status \"ok\" and real metrics, or
-        NO_GROUND_TRUTH when no forecast, wrong store, missing data, or no
-        overlapping dates with finite actuals.
+        MetricsOkResponse with status ``ok`` and real metrics, or
+        ``no_ground_truth`` with a ``reason`` code and ``message`` when evaluation
+        cannot run.
     """
     rec = _last_forecast_record
     drift_part = _drift_for_metrics_request(store_id, rec)
+    pq = _parquet_path()
 
     if rec is None:
-        out = dict(NO_GROUND_TRUTH)
+        out = _no_ground_truth(
+            "no_forecast_record",
+            "No forecast has been recorded yet; run POST /api/v1/forecast/store or POST /api/v1/predict first.",
+        )
         if drift_part is not None:
             out["drift"] = drift_part
+        logger.info("metrics_evaluation: status=no_ground_truth reason=no_forecast_record")
         return out
 
     sid = int(rec["store_id"])
     if store_id is not None and int(store_id) != sid:
-        out = dict(NO_GROUND_TRUTH)
+        out = _no_ground_truth(
+            "store_mismatch",
+            f"Requested store_id={store_id} does not match the last forecast store_id={sid}.",
+        )
         if drift_part is not None:
             out["drift"] = drift_part
+        logger.info(
+            "metrics_evaluation: status=no_ground_truth reason=store_mismatch requested=%s recorded=%s",
+            store_id,
+            sid,
+        )
         return out
 
-    if not _PARQUET_PATH.exists():
-        logger.warning("Metrics: processed parquet missing at %s", _PARQUET_PATH)
-        out = dict(NO_GROUND_TRUTH)
+    if not pq.exists():
+        logger.warning("Metrics: processed parquet missing at %s", pq)
+        out = _no_ground_truth(
+            "processed_data_missing",
+            f"Processed dataset not found at {pq}. Run ETL or set E2E_PROCESSED_PARQUET_PATH.",
+        )
         if drift_part is not None:
             out["drift"] = drift_part
+        logger.info("metrics_evaluation: status=no_ground_truth reason=processed_data_missing path=%s", pq)
         return out
 
     target_col = _load_target_column()
     try:
-        df = pd.read_parquet(_PARQUET_PATH, columns=["store_id", "date", target_col])
+        df = pd.read_parquet(pq, columns=["store_id", "date", target_col])
     except Exception as exc:
         logger.warning("Metrics: could not read parquet: %s", exc)
-        out = dict(NO_GROUND_TRUTH)
+        out = _no_ground_truth(
+            "parquet_read_error",
+            f"Could not read processed data: {exc}",
+        )
         if drift_part is not None:
             out["drift"] = drift_part
+        logger.info("metrics_evaluation: status=no_ground_truth reason=parquet_read_error")
         return out
 
     store_df = df[df["store_id"] == sid].copy()
     if store_df.empty:
-        out = dict(NO_GROUND_TRUTH)
+        out = _no_ground_truth(
+            "no_rows_for_store",
+            f"No rows in processed data for store_id={sid}.",
+        )
         if drift_part is not None:
             out["drift"] = drift_part
+        logger.info("metrics_evaluation: status=no_ground_truth reason=no_rows_for_store store_id=%s", sid)
         return out
 
     store_df["_d"] = store_df["date"].map(_normalize_date_key)
@@ -249,16 +278,27 @@ def evaluate_last_forecast_vs_actuals(
         dates_out.append(dkey)
 
     if not y_true_list:
-        out = dict(NO_GROUND_TRUTH)
+        out = _no_ground_truth(
+            "no_overlapping_dates",
+            "Forecast dates do not overlap finite actuals in processed data for this store.",
+        )
         if drift_part is not None:
             out["drift"] = drift_part
+        logger.info(
+            "metrics_evaluation: status=no_ground_truth reason=no_overlapping_dates store_id=%s",
+            sid,
+        )
         return out
 
     computed = compute_aligned_metrics(np.array(y_true_list), np.array(y_pred_list))
     if computed is None:
-        out = dict(NO_GROUND_TRUTH)
+        out = _no_ground_truth(
+            "metrics_computation_failed",
+            "Could not compute MAE/RMSE/MAPE from aligned pairs (no valid samples).",
+        )
         if drift_part is not None:
             out["drift"] = drift_part
+        logger.info("metrics_evaluation: status=no_ground_truth reason=metrics_computation_failed store_id=%s", sid)
         return out
 
     result: MetricsOkResponse = {
@@ -273,4 +313,12 @@ def evaluate_last_forecast_vs_actuals(
     }
     if drift_part is not None:
         result["drift"] = drift_part
+    logger.info(
+        "metrics_evaluation: status=ok store_id=%s n_samples=%s mae=%s rmse=%s mape=%s",
+        sid,
+        len(y_true_list),
+        computed["mae"],
+        computed["rmse"],
+        computed["mape"],
+    )
     return result

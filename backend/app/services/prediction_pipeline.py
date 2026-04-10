@@ -7,6 +7,7 @@ Used by POST /forecast/store and POST /predict so behavior stays consistent.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 from backend.app.services.forecasting_service import forecast_store
@@ -28,6 +29,7 @@ def execute_store_forecast(
 
     Returns the same forecast row shape as the public forecast API.
     """
+    t0 = time.perf_counter()
     forecasts = forecast_store(store_id, horizon, model, feature_columns)
 
     try:
@@ -49,6 +51,16 @@ def execute_store_forecast(
 
     record_forecast_for_evaluation(store_id, horizon, forecasts)
     record_forecast_activity(store_id, horizon)
+
+    latency_ms = round((time.perf_counter() - t0) * 1000, 2)
+    logger.info(
+        "prediction_complete: store_id=%s horizon=%s points=%s latency_ms=%s " "residual_intervals=%s",
+        store_id,
+        horizon,
+        len(forecasts),
+        latency_ms,
+        "yes" if residual_std > 0 else "no",
+    )
 
     return forecasts
 

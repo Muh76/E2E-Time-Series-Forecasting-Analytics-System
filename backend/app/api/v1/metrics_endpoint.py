@@ -18,7 +18,7 @@ async def get_forecast_metrics(
     """
     After ``POST /api/v1/forecast/store`` or ``POST /api/v1/predict``, compares forecast dates to
     processed data actuals. Returns MAE, RMSE, MAPE when overlapping ground
-    truth exists; otherwise ``no_ground_truth`` with a fixed message.
+    truth exists; otherwise ``no_ground_truth`` with ``reason`` and ``message``.
 
     When processed data is sufficient, includes ``drift`` with ``drift_score``
     (0--1) and ``status`` ``low`` / ``medium`` / ``high`` (early vs late window).

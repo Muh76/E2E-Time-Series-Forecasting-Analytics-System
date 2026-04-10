@@ -12,24 +12,17 @@ The model is passed explicitly (preloaded at application startup).
 """
 
 import logging
-import sys
-from pathlib import Path
 from typing import Any
 
 import pandas as pd
 import yaml
 
+from backend.app.runtime_paths import base_default_config_path, ensure_project_on_sys_path, processed_parquet_path
 from backend.app.services.model_loader import get_model_metadata
 
 logger = logging.getLogger(__name__)
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
-_PARQUET_PATH = _PROJECT_ROOT / "data" / "processed" / "etl_output.parquet"
-_CONFIG_PATH = _PROJECT_ROOT / "config" / "base" / "default.yaml"
-
-# Ensure project root is on sys.path so data.feature_engineering is importable
-if str(_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PROJECT_ROOT))
+ensure_project_on_sys_path()
 
 # Minimum rows required for reliable feature computation
 # (covers the longest lag/rolling window: 14 days + a small buffer)
@@ -48,14 +41,14 @@ def _get_inference_config() -> dict[str, Any]:
     """
     global _inference_config
     if _inference_config is None:
-        if not _CONFIG_PATH.exists():
+        cfg_path = base_default_config_path()
+        if not cfg_path.exists():
             raise RuntimeError(
-                f"Base config not found: {_CONFIG_PATH}. "
-                "Ensure config/base/default.yaml exists."
+                f"Base config not found: {cfg_path}. " "Ensure config exists or set E2E_BASE_CONFIG_PATH."
             )
-        with _CONFIG_PATH.open() as f:
+        with cfg_path.open() as f:
             _inference_config = yaml.safe_load(f) or {}
-        logger.info("Inference config loaded from %s", _CONFIG_PATH)
+        logger.info("Inference config loaded from %s", cfg_path)
     return _inference_config
 
 
@@ -67,6 +60,7 @@ def _run_feature_pipeline(df: pd.DataFrame, config: dict[str, Any]) -> pd.DataFr
     root is added to sys.path at module load time to ensure importability.
     """
     from data.feature_engineering import run_feature_pipeline  # noqa: PLC0415
+
     return run_feature_pipeline(df, config)
 
 
@@ -80,13 +74,13 @@ def get_store_last_date(store_id: int) -> str:
         ValueError: If store_id not found or dataset missing required columns.
         RuntimeError: If processed parquet does not exist.
     """
-    if not _PARQUET_PATH.exists():
+    pq = processed_parquet_path()
+    if not pq.exists():
         raise RuntimeError(
-            f"Processed dataset not found: {_PARQUET_PATH}. "
-            "Run the ETL pipeline (scripts/run_etl.py) to generate it."
+            f"Processed dataset not found: {pq}. " "Run the ETL pipeline or set E2E_PROCESSED_PARQUET_PATH."
         )
 
-    df = pd.read_parquet(_PARQUET_PATH, columns=["store_id", "date"])
+    df = pd.read_parquet(pq, columns=["store_id", "date"])
 
     store_df = df[df["store_id"] == store_id]
     if store_df.empty:
@@ -157,13 +151,13 @@ def forecast_store(store_id: int, horizon: int, model: Any, feature_columns: lis
     if horizon < 1:
         raise ValueError(f"horizon must be >= 1, got {horizon}.")
 
-    if not _PARQUET_PATH.exists():
+    pq = processed_parquet_path()
+    if not pq.exists():
         raise RuntimeError(
-            f"Processed dataset not found: {_PARQUET_PATH}. "
-            "Run the ETL pipeline (scripts/run_etl.py) to generate it."
+            f"Processed dataset not found: {pq}. " "Run the ETL pipeline or set E2E_PROCESSED_PARQUET_PATH."
         )
 
-    df = pd.read_parquet(_PARQUET_PATH)
+    df = pd.read_parquet(pq)
 
     store_col = "store_id"
     if store_col not in df.columns:
@@ -193,15 +187,11 @@ def forecast_store(store_id: int, horizon: int, model: Any, feature_columns: lis
 
     # Load config (same as used during training) and run feature pipeline
     config = _get_inference_config()
-    logger.info(
-        "Running feature pipeline for store_id=%d (%d rows)", store_id, len(store_df)
-    )
+    logger.info("Running feature pipeline for store_id=%d (%d rows)", store_id, len(store_df))
     featured_df = _run_feature_pipeline(store_df, config)
 
     # Enforce strict column alignment: validate presence and reorder to training order
-    logger.info(
-        "Enforcing feature column alignment: expecting %d columns", len(feature_columns)
-    )
+    logger.info("Enforcing feature column alignment: expecting %d columns", len(feature_columns))
     _enforce_feature_columns(featured_df, feature_columns)
     logger.info("Feature column alignment verified for store_id=%d", store_id)
 
@@ -211,14 +201,13 @@ def forecast_store(store_id: int, horizon: int, model: Any, feature_columns: lis
     # for recursive extension; the model internally selects self._feature_cols.
     predictions: pd.DataFrame = model.predict(featured_df, horizon, config)
 
-    result = [
-        {"date": str(row["date"])[:10], "forecast": float(row["y_pred"])}
-        for _, row in predictions.iterrows()
-    ]
+    result = [{"date": str(row["date"])[:10], "forecast": float(row["y_pred"])} for _, row in predictions.iterrows()]
 
     logger.info(
         "Forecast generated for store_id=%d, horizon=%d, steps=%d",
-        store_id, horizon, len(result),
+        store_id,
+        horizon,
+        len(result),
     )
 
     return result
