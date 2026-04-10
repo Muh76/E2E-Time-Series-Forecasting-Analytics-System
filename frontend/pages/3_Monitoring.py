@@ -1,15 +1,15 @@
 """
 Monitoring & Drift — performance metrics, drift detection, and alerts.
-Read-only; all data and charts from API. Uses mock when API unavailable.
+Read-only; data and charts come from the API.
 """
 
 from datetime import datetime, timezone
 
+import requests
 import streamlit as st
-
-from components.api import get_monitoring_summary
+from components.api import describe_request_error, get_monitoring_summary
 from components.charts import render_drift_bar_chart, render_rolling_metric_chart
-from components.ui import chart_loading_placeholder, render_empty, with_loading
+from components.ui import chart_loading_placeholder, render_empty, render_error, with_loading
 
 
 def _summary_for_copilot(summary: dict) -> dict:
@@ -22,10 +22,15 @@ def main() -> None:
     st.title("Monitoring & Drift")
 
     chart_ph = chart_loading_placeholder()
-    summary = with_loading(get_monitoring_summary)
+    try:
+        summary = with_loading(get_monitoring_summary)
+    except requests.RequestException as exc:
+        chart_ph.empty()
+        render_error(describe_request_error(exc))
+        return
     chart_ph.empty()
 
-    # Thresholds from API only (mock includes them when backend unavailable)
+    # Thresholds from API
     thresholds = summary.get("thresholds") or {}
     mae_alert = thresholds.get("mae_alert", 15.0)
     mape_alert = thresholds.get("mape_alert", 0.20)
@@ -62,23 +67,29 @@ def main() -> None:
         drift_data = summary.get("drift") or {}
         alerts_list = []
         if mae_alerted:
-            alerts_list.append({
-                "alert_type": "MAE",
-                "current_value": perf.get("mae"),
-                "threshold": mae_alert,
-            })
+            alerts_list.append(
+                {
+                    "alert_type": "MAE",
+                    "current_value": perf.get("mae"),
+                    "threshold": mae_alert,
+                }
+            )
         if mape_alerted:
-            alerts_list.append({
-                "alert_type": "MAPE",
-                "current_value": perf.get("mape"),
-                "threshold": mape_alert,
-            })
+            alerts_list.append(
+                {
+                    "alert_type": "MAPE",
+                    "current_value": perf.get("mape"),
+                    "threshold": mape_alert,
+                }
+            )
         if drift_alerted:
-            alerts_list.append({
-                "alert_type": "Drift",
-                "current_value": drift_data.get("overall_score"),
-                "threshold": drift_threshold,
-            })
+            alerts_list.append(
+                {
+                    "alert_type": "Drift",
+                    "current_value": drift_data.get("overall_score"),
+                    "threshold": drift_threshold,
+                }
+            )
 
         if st.button("Explain this alert", key="explain_alert_btn"):
             timestamp = summary.get("as_of") or datetime.now(timezone.utc).isoformat()

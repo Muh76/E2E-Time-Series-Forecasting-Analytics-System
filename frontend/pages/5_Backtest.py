@@ -4,8 +4,7 @@ Store-level Backtest — rolling-origin evaluation with per-split metrics.
 
 import requests
 import streamlit as st
-
-from components.api import backtest_store, parse_api_error
+from components.api import backtest_store, describe_request_error, parse_api_error
 from components.ui import render_error
 
 
@@ -33,8 +32,8 @@ def main() -> None:
                 st.session_state["bt_result"] = result
             except requests.HTTPError as exc:
                 st.session_state["bt_error"] = parse_api_error(exc)
-            except requests.ConnectionError:
-                st.session_state["bt_error"] = [{"field": "connection", "message": "Backend is unreachable."}]
+            except requests.RequestException as exc:
+                st.session_state["bt_error"] = [{"field": "api", "message": describe_request_error(exc)}]
             finally:
                 st.session_state["bt_loading"] = False
 
@@ -58,14 +57,17 @@ def main() -> None:
         if splits:
             st.subheader("Per-Split Results")
             st.dataframe(
-                [{
-                    "Split": s["split"],
-                    "Cutoff": s["cutoff_date"],
-                    "Horizon": s["horizon"],
-                    "RMSE": round(s["rmse"], 2),
-                    "MAE": round(s["mae"], 2),
-                    "MAPE": f"{s['mape']:.1f}%",
-                } for s in splits],
+                [
+                    {
+                        "Split": s["split"],
+                        "Cutoff": s["cutoff_date"],
+                        "Horizon": s["horizon"],
+                        "RMSE": round(s["rmse"], 2),
+                        "MAE": round(s["mae"], 2),
+                        "MAPE": f"{s['mape']:.1f}%",
+                    }
+                    for s in splits
+                ],
                 use_container_width=True,
                 hide_index=True,
             )

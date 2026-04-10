@@ -4,11 +4,11 @@ Overview page — system health and status.
 
 from datetime import datetime
 
+import requests
 import streamlit as st
-
-from components.api import get_monitoring_summary
+from components.api import describe_request_error, get_monitoring_summary
 from components.metrics import format_float, format_mape
-from components.ui import with_loading
+from components.ui import render_error, with_loading
 
 
 def _format_timestamp(iso_str: str) -> str:
@@ -46,7 +46,11 @@ def main() -> None:
     st.title("System Overview")
     st.markdown("Current system health and model status.")
 
-    summary = with_loading(get_monitoring_summary)
+    try:
+        summary = with_loading(get_monitoring_summary)
+    except requests.RequestException as exc:
+        render_error(describe_request_error(exc))
+        return
 
     # Overall status
     pipeline = summary.get("pipeline") or {}
