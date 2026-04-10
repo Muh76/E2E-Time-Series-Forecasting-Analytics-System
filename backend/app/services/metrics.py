@@ -20,6 +20,7 @@ import numpy as np
 import pandas as pd
 import yaml
 
+from backend.services.drift import compute_distribution_drift
 from models.evaluation.metrics import compute_metrics
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,11 @@ NO_GROUND_TRUTH: dict[str, str] = {
 }
 
 
+class DriftPayload(TypedDict):
+    drift_score: float
+    status: str
+
+
 class MetricsOkResponse(TypedDict, total=False):
     status: str
     store_id: int
@@ -49,6 +55,8 @@ class MetricsOkResponse(TypedDict, total=False):
     rmse: float | None
     mape: float | None
     evaluated_dates: list[str]
+    drift: DriftPayload
+    message: str
 
 
 def _load_target_column() -> str:
@@ -58,6 +66,30 @@ def _load_target_column() -> str:
         cfg = yaml.safe_load(f) or {}
     fe = cfg.get("feature_engineering") or {}
     return str(fe.get("target_column", "target_cleaned"))
+
+
+def _pack_drift_payload(raw: dict[str, Any] | None) -> DriftPayload | None:
+    """Expose only drift_score and status on the API."""
+    if raw is None:
+        return None
+    return {
+        "drift_score": float(raw["drift_score"]),
+        "status": str(raw["status"]),
+    }
+
+
+def _drift_for_metrics_request(store_id_query: int | None, rec: dict[str, Any] | None) -> DriftPayload | None:
+    """
+    Choose store slice for drift: explicit query wins, else last forecast store, else all rows.
+    """
+    sid: int | None
+    if store_id_query is not None:
+        sid = int(store_id_query)
+    elif rec is not None:
+        sid = int(rec["store_id"])
+    else:
+        sid = None
+    return _pack_drift_payload(compute_distribution_drift(store_id=sid))
 
 
 def _normalize_date_key(d: Any) -> str:
@@ -156,27 +188,44 @@ def evaluate_last_forecast_vs_actuals(
         overlapping dates with finite actuals.
     """
     rec = _last_forecast_record
+    drift_part = _drift_for_metrics_request(store_id, rec)
+
     if rec is None:
-        return dict(NO_GROUND_TRUTH)
+        out = dict(NO_GROUND_TRUTH)
+        if drift_part is not None:
+            out["drift"] = drift_part
+        return out
 
     sid = int(rec["store_id"])
     if store_id is not None and int(store_id) != sid:
-        return dict(NO_GROUND_TRUTH)
+        out = dict(NO_GROUND_TRUTH)
+        if drift_part is not None:
+            out["drift"] = drift_part
+        return out
 
     if not _PARQUET_PATH.exists():
         logger.warning("Metrics: processed parquet missing at %s", _PARQUET_PATH)
-        return dict(NO_GROUND_TRUTH)
+        out = dict(NO_GROUND_TRUTH)
+        if drift_part is not None:
+            out["drift"] = drift_part
+        return out
 
     target_col = _load_target_column()
     try:
         df = pd.read_parquet(_PARQUET_PATH, columns=["store_id", "date", target_col])
     except Exception as exc:
         logger.warning("Metrics: could not read parquet: %s", exc)
-        return dict(NO_GROUND_TRUTH)
+        out = dict(NO_GROUND_TRUTH)
+        if drift_part is not None:
+            out["drift"] = drift_part
+        return out
 
     store_df = df[df["store_id"] == sid].copy()
     if store_df.empty:
-        return dict(NO_GROUND_TRUTH)
+        out = dict(NO_GROUND_TRUTH)
+        if drift_part is not None:
+            out["drift"] = drift_part
+        return out
 
     store_df["_d"] = store_df["date"].map(_normalize_date_key)
     fmap = {row["date"]: row["forecast"] for row in rec["forecasts"]}
@@ -200,11 +249,17 @@ def evaluate_last_forecast_vs_actuals(
         dates_out.append(dkey)
 
     if not y_true_list:
-        return dict(NO_GROUND_TRUTH)
+        out = dict(NO_GROUND_TRUTH)
+        if drift_part is not None:
+            out["drift"] = drift_part
+        return out
 
     computed = compute_aligned_metrics(np.array(y_true_list), np.array(y_pred_list))
     if computed is None:
-        return dict(NO_GROUND_TRUTH)
+        out = dict(NO_GROUND_TRUTH)
+        if drift_part is not None:
+            out["drift"] = drift_part
+        return out
 
     result: MetricsOkResponse = {
         "status": "ok",
@@ -216,4 +271,6 @@ def evaluate_last_forecast_vs_actuals(
         "mape": computed["mape"],
         "evaluated_dates": dates_out,
     }
+    if drift_part is not None:
+        result["drift"] = drift_part
     return result
