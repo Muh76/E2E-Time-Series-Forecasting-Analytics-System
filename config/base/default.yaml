@@ -143,5 +143,5 @@ api:
 # Frontend (Streamlit)
 # ---------------------------------------------------------------------------
 frontend:
-  api_base_url: "http://localhost:8000"  # override in staging/prod
+  api_base_url: "http://127.0.0.1:8001"  # override with env API_URL or staging/prod config
   page_title: "Time Series Forecasting & Analytics"

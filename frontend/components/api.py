@@ -1,13 +1,13 @@
 """
 API client utilities for the Streamlit frontend.
 
-Loads backend API base URL from config and provides helpers for API calls.
-Uses requests; returns mock data when backend is unavailable.
-Uses st.cache_data for successful and mock responses (separate cache keys).
+Base URL: ``API_URL`` environment variable (default ``http://127.0.0.1:8001``),
+then ``frontend.api_base_url`` from config, then ``API_BASE_URL``.
+Calls the real FastAPI backend; failures raise ``requests.RequestException``
+(callers should catch and show UI errors — no silent mock data).
 """
 
 import json
-import logging
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -21,8 +21,10 @@ import yaml
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 _DEFAULT_TIMEOUT = 10
+_FORECAST_TIMEOUT = 120
 
-logger = logging.getLogger(__name__)
+# Backend base URL when ``API_URL`` is unset (see ``get_api_base_url`` for full resolution order).
+API_URL = os.getenv("API_URL", "http://127.0.0.1:8001")
 
 
 def _load_config() -> dict:
@@ -50,17 +52,22 @@ def _load_config() -> dict:
 
 def get_api_base_url() -> str:
     """
-    Return backend API base URL. Single source of truth.
-    Priority: 1) config frontend.api_base_url, 2) env API_BASE_URL, 3) fallback http://localhost:8000.
+    Return backend API base URL.
+
+    Priority: ``API_URL`` env, ``frontend.api_base_url`` in config, ``API_BASE_URL`` env,
+    then default ``http://127.0.0.1:8001``.
     """
+    env_url = os.environ.get("API_URL")
+    if env_url:
+        return str(env_url).rstrip("/")
     config = _load_config()
     url = config.get("frontend", {}).get("api_base_url")
     if url:
-        return url
-    url = os.environ.get("API_BASE_URL")
-    if url:
-        return url
-    return "http://localhost:8000"
+        return str(url).rstrip("/")
+    legacy = os.environ.get("API_BASE_URL")
+    if legacy:
+        return str(legacy).rstrip("/")
+    return str(API_URL).rstrip("/")
 
 
 def api_url(path: str) -> str:
@@ -81,19 +88,6 @@ def check_api_health() -> bool:
         return resp.status_code == 200
     except Exception:
         return False
-
-
-def _is_backend_unavailable(exc: BaseException, include_404: bool = False) -> bool:
-    """Return True if the exception indicates backend is unreachable."""
-    if isinstance(exc, (requests.ConnectionError, requests.Timeout)):
-        return True
-    if isinstance(exc, requests.RequestException):
-        resp = getattr(exc, "response", None)
-        if resp is not None and resp.status_code >= 500:
-            return True
-        if include_404 and resp is not None and resp.status_code == 404:
-            return True
-    return False
 
 
 def get_forecasts(
@@ -118,41 +112,9 @@ def get_forecasts(
         payload["model_version"] = model_version
 
     url = api_url("/api/v1/forecasts/generate")
-    try:
-        resp = requests.post(url, json=payload, timeout=_DEFAULT_TIMEOUT)
-        resp.raise_for_status()
-        return resp.json()
-    except requests.RequestException as e:
-        if _is_backend_unavailable(e):
-            logger.warning("Backend unavailable, returning mock forecasts: %s", e)
-            return _mock_forecasts(series_ids, horizon_steps, frequency)
-        raise
-
-
-def _mock_forecasts(
-    series_ids: list[str],
-    horizon_steps: int,
-    frequency: str,
-) -> dict[str, Any]:
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    forecasts = []
-    for sid in series_ids:
-        base = 100.0
-        forecasts.append(
-            {
-                "series_id": sid,
-                "model_version": "v1.0.0",
-                "frequency": frequency,
-                "point_forecast": [base + i * 0.5 for i in range(horizon_steps)],
-                "steps": list(range(1, horizon_steps + 1)),
-            }
-        )
-    return {
-        "job_id": "mock_gen_001",
-        "status": "completed",
-        "forecasts": forecasts,
-        "generated_at": now,
-    }
+    resp = requests.post(url, json=payload, timeout=_DEFAULT_TIMEOUT)
+    resp.raise_for_status()
+    return resp.json()
 
 
 def normalize_monitoring_summary(raw_summary: dict[str, Any] | None) -> dict[str, Any]:
@@ -238,58 +200,12 @@ def _cached_monitoring_summary_api(
     return normalize_monitoring_summary(resp.json())
 
 
-@st.cache_data(ttl=60)
-def _cached_monitoring_summary_mock(
-    model_version: str | None,
-    since: str | None,
-) -> dict[str, Any]:
-    """Cached mock response when API is unreachable. Cache key includes model_version + since."""
-    return _mock_monitoring_summary()
-
-
 def get_monitoring_summary(
     model_version: str | None = None,
     since: str | None = None,
 ) -> dict[str, Any]:
-    """Fetch monitoring summary. Returns normalized mock data if backend is unavailable."""
-    try:
-        return _cached_monitoring_summary_api(model_version, since)
-    except requests.RequestException as e:
-        if _is_backend_unavailable(e):
-            logger.warning("Backend unavailable, returning mock monitoring summary: %s", e)
-            return _cached_monitoring_summary_mock(model_version, since)
-        raise
-
-
-def _mock_monitoring_summary() -> dict[str, Any]:
-    """Offline fallback only — no fabricated metrics; empty series."""
-    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-    raw = {
-        "model_info": {"model_name": "lightgbm", "model_version": "unknown"},
-        "model_version": "unknown",
-        "as_of": now,
-        "performance": {
-            "mae": None,
-            "rmse": None,
-            "mape": None,
-            "sample_size": 0,
-            "source": "offline",
-        },
-        "drift": {
-            "status": "ok",
-            "last_checked": now,
-            "indicators": [],
-            "per_feature_scores": {},
-            "overall_score": None,
-            "threshold": 0.25,
-        },
-        "pipeline": {"last_training": None, "last_etl": None, "status": "unknown"},
-        "rolling_series": {"mae": [], "mape": []},
-        "thresholds": {"mae_alert": 15.0, "mape_alert": 0.20, "drift_threshold": 0.25},
-        "alerts": {"mae": False, "mape": False, "drift": False},
-        "recent_activity": {},
-    }
-    return normalize_monitoring_summary(raw)
+    """Fetch monitoring summary from the API. Raises ``requests.RequestException`` on failure."""
+    return _cached_monitoring_summary_api(model_version, since)
 
 
 def forecast_store(store_id: int, horizon: int) -> dict[str, Any]:
@@ -304,8 +220,35 @@ def forecast_store(store_id: int, horizon: int) -> dict[str, Any]:
     resp = requests.post(
         url,
         json={"store_id": store_id, "horizon": horizon},
-        timeout=_DEFAULT_TIMEOUT,
+        timeout=_FORECAST_TIMEOUT,
     )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def get_forecast_evaluation_metrics(store_id: int | None = None) -> dict[str, Any]:
+    """
+    GET /api/v1/metrics — last forecast vs ground truth for the given store (optional).
+
+    Call after ``forecast_store`` so the backend has recorded the forecast.
+    """
+    url = api_url("/api/v1/metrics")
+    params: dict[str, int] = {}
+    if store_id is not None:
+        params["store_id"] = int(store_id)
+    resp = requests.get(url, params=params or None, timeout=_DEFAULT_TIMEOUT)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def copilot_forecast_insights(
+    forecast: list[Any],
+    metrics: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """POST /api/v1/copilot — rule-based summary, insights, confidence."""
+    url = api_url("/api/v1/copilot")
+    payload = {"forecast": forecast, "metrics": metrics or {}}
+    resp = requests.post(url, json=payload, timeout=30)
     resp.raise_for_status()
     return resp.json()
 
@@ -321,7 +264,7 @@ def predict_store(store_id: int, horizon: int, *, include_insights: bool = False
         url,
         params={"include_insights": str(include_insights).lower()},
         json={"store_id": store_id, "horizon": horizon},
-        timeout=_DEFAULT_TIMEOUT if not include_insights else max(_DEFAULT_TIMEOUT, 60),
+        timeout=_FORECAST_TIMEOUT if not include_insights else max(_FORECAST_TIMEOUT, 60),
     )
     resp.raise_for_status()
     return resp.json()
@@ -375,6 +318,22 @@ def parse_api_error(exc: requests.HTTPError) -> list[dict[str, str]]:
     return [{"field": "unknown", "message": str(body)}]
 
 
+def describe_request_error(exc: BaseException) -> str:
+    """Single user-facing message for connection, timeout, or HTTP errors."""
+    if isinstance(exc, requests.Timeout):
+        return "Request timed out. Check that the API is running and reachable."
+    if isinstance(exc, requests.ConnectionError):
+        return (
+            "Cannot connect to the API. Set environment variable API_URL "
+            "(default http://127.0.0.1:8001) and ensure the FastAPI server is running."
+        )
+    if isinstance(exc, requests.HTTPError):
+        parts = parse_api_error(exc)
+        if parts:
+            return "; ".join(p.get("message", "") for p in parts)
+    return str(exc) or "Request failed."
+
+
 def _context_hash(context: dict[str, Any] | None) -> str:
     """Stable string for cache key from context dict."""
     if not context:
@@ -402,17 +361,6 @@ def _cached_copilot_explain_api(
     return resp.json()
 
 
-@st.cache_data(ttl=120)
-def _cached_copilot_explain_mock(
-    query: str,
-    context_serialized: str,
-    options_serialized: str,
-) -> dict[str, Any]:
-    """Cached mock response when API is unreachable. Cache key includes query + context + options."""
-    context: dict[str, Any] | None = json.loads(context_serialized) if context_serialized else None
-    return _mock_copilot_explain(query, context)
-
-
 def copilot_explain(
     query: str,
     context: dict[str, Any] | None = None,
@@ -420,41 +368,11 @@ def copilot_explain(
 ) -> dict[str, Any]:
     """
     Request explanation from copilot. POST /api/v1/copilot/explain.
-    Pass monitoring_summary and metrics in context for grounding.
-    Returns mock when backend unavailable or endpoint missing (404).
+    Raises ``requests.RequestException`` on failure.
     """
     context_serialized = _context_hash(context)
     options_serialized = _context_hash(options) if options else ""
-    try:
-        return _cached_copilot_explain_api(query, context_serialized, options_serialized)
-    except requests.RequestException as e:
-        if _is_backend_unavailable(e, include_404=True):
-            logger.warning("Copilot unavailable, returning mock explanation: %s", e)
-            return _cached_copilot_explain_mock(query, context_serialized, options_serialized)
-        raise
-
-
-def _mock_copilot_explain(query: str, context: dict[str, Any] | None) -> dict[str, Any]:
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    perf = (context or {}).get("monitoring_summary", {}).get("performance", {}) or {}
-    mae = perf.get("mae")
-    mape = perf.get("mape")
-    if mape is None:
-        mape_disp = "n/a"
-    elif 0 <= mape < 1:
-        mape_disp = f"{mape * 100:.1f}%"
-    else:
-        mape_disp = f"{mape:.1f}%"
-    return {
-        "explanation": (
-            f'You asked: "{query}"\n\n'
-            "**Offline mode:** the API is unreachable. "
-            f"Context snapshot — MAE={mae}, MAPE={mape_disp}. "
-            "Start the FastAPI backend and ensure the sidebar API URL is correct."
-        ),
-        "sources": [{"type": "offline", "note": "Backend unreachable"}],
-        "generated_at": now,
-    }
+    return _cached_copilot_explain_api(query, context_serialized, options_serialized)
 
 
 def get_monitoring_series(
@@ -466,7 +384,7 @@ def get_monitoring_series(
 ) -> dict[str, Any]:
     """
     Fetch monitoring time series (rolling MAE, MAPE, etc).
-    GET /api/v1/monitoring/series. Returns mock data if backend unavailable.
+    GET /api/v1/monitoring/series. Raises if the route is unavailable.
     """
     params: dict[str, str] = {
         "metric": metric,
@@ -478,26 +396,9 @@ def get_monitoring_series(
         params["model_version"] = model_version
 
     url = api_url("/api/v1/monitoring/series")
-    try:
-        resp = requests.get(url, params=params, timeout=_DEFAULT_TIMEOUT)
-        resp.raise_for_status()
-        return resp.json()
-    except requests.RequestException as e:
-        if _is_backend_unavailable(e):
-            logger.warning("Backend unavailable, returning mock monitoring series: %s", e)
-            return _mock_monitoring_series(metric, start_date, end_date)
-        raise
-
-
-def _mock_monitoring_series(metric: str, start_date: str, end_date: str) -> dict[str, Any]:
-    start = datetime.fromisoformat(start_date).date()
-    end = datetime.fromisoformat(end_date).date()
-    delta = (end - start).days + 1
-    base = 2.3 if metric == "mae" else 0.04
-    data = [
-        {"date": (start + timedelta(days=i)).isoformat(), "value": base + (i % 5) * 0.1} for i in range(min(delta, 14))
-    ]
-    return {"metric": metric, "model_version": "v1.0.0", "granularity": "daily", "data": data}
+    resp = requests.get(url, params=params, timeout=_DEFAULT_TIMEOUT)
+    resp.raise_for_status()
+    return resp.json()
 
 
 def get_metrics(
@@ -509,7 +410,7 @@ def get_metrics(
 ) -> dict[str, Any]:
     """
     Fetch historical metrics. GET /api/v1/metrics/historical.
-    Returns mock data if backend is unavailable.
+    Raises if the route is unavailable.
     """
     series_ids = series_ids or ["series_001"]
     today = datetime.now(timezone.utc).date()
@@ -529,46 +430,9 @@ def get_metrics(
         params["model_version"] = model_version
 
     url = api_url("/api/v1/metrics/historical")
-    try:
-        resp = requests.get(url, params=params, timeout=_DEFAULT_TIMEOUT)
-        resp.raise_for_status()
-        return resp.json()
-    except requests.RequestException as e:
-        if _is_backend_unavailable(e):
-            logger.warning("Backend unavailable, returning mock metrics: %s", e)
-            return _mock_metrics(series_ids, start_date, end_date)
-        raise
-
-
-def _mock_metrics(
-    series_ids: list[str],
-    start_date: str,
-    end_date: str,
-) -> dict[str, Any]:
-    start = datetime.fromisoformat(start_date).date()
-    end = datetime.fromisoformat(end_date).date()
-    delta = (end - start).days + 1
-    data = []
-    for sid in series_ids:
-        base = 100.0
-        for i in range(delta):
-            d = (start + timedelta(days=i)).isoformat()
-            actual = base + (i % 7) * 2.0
-            forecast = actual + 0.5
-            data.append(
-                {
-                    "series_id": sid,
-                    "date": d,
-                    "actual": round(actual, 2),
-                    "forecast": round(forecast, 2),
-                    "error": round(forecast - actual, 2),
-                    "model_version": "v1.0.0",
-                }
-            )
-    return {
-        "data": data,
-        "meta": {"series_ids": series_ids, "start_date": start_date, "end_date": end_date, "count": len(data)},
-    }
+    resp = requests.get(url, params=params, timeout=_DEFAULT_TIMEOUT)
+    resp.raise_for_status()
+    return resp.json()
 
 
 @st.cache_data(ttl=30)
@@ -587,16 +451,6 @@ def _cached_forecast_vs_actual_api(
     return resp.json()
 
 
-@st.cache_data(ttl=30)
-def _cached_forecast_vs_actual_mock(
-    entity_id: str | None,
-    horizon: int,
-    include_baseline: bool,
-) -> dict[str, Any]:
-    """Cached mock response when API is unreachable."""
-    return _mock_forecast_vs_actual(entity_id, horizon, include_baseline)
-
-
 def get_forecast_vs_actual(
     entity_id: str | None = None,
     horizon: int = 14,
@@ -604,66 +458,6 @@ def get_forecast_vs_actual(
 ) -> dict[str, Any]:
     """
     Fetch forecast vs actual data ready for plotting.
-    Returns actual and forecast time series plus precomputed metrics (MAE, RMSE, MAPE).
-    GET /api/v1/forecasts/vs-actual. Returns mock data if backend unavailable.
+    GET /api/v1/forecasts/vs-actual. Raises if the route is unavailable.
     """
-    try:
-        return _cached_forecast_vs_actual_api(entity_id, horizon, include_baseline)
-    except requests.RequestException as e:
-        if _is_backend_unavailable(e):
-            logger.warning("Backend unavailable, returning mock forecast vs actual: %s", e)
-            return _cached_forecast_vs_actual_mock(entity_id, horizon, include_baseline)
-        raise
-
-
-def _mock_forecast_vs_actual(
-    entity_id: str | None,
-    horizon: int,
-    include_baseline: bool = False,
-) -> dict[str, Any]:
-    """Mock forecast vs actual with ready-to-plot data and metrics."""
-    today = datetime.now(timezone.utc).date()
-    entity_ids = ["series_001", "series_002", "series_003"]
-    eid = entity_id or entity_ids[0]
-    if eid not in entity_ids:
-        entity_ids = [eid] + entity_ids
-
-    # Historical actual + forecast overlap (last 14 days)
-    hist_days = 14
-    actual_dates: list[str] = []
-    actual_values: list[float] = []
-    forecast_dates: list[str] = []
-    forecast_values: list[float] = []
-
-    base = 100.0
-    for i in range(hist_days):
-        d = (today - timedelta(days=hist_days - 1 - i)).isoformat()
-        actual_dates.append(d)
-        val = base + (i % 7) * 2.0
-        actual_values.append(round(val, 2))
-        forecast_values.append(round(val + 0.3 * (i % 3 - 1), 2))
-        forecast_dates.append(d)
-
-    # Future forecast only
-    for i in range(1, horizon + 1):
-        d = (today + timedelta(days=i)).isoformat()
-        forecast_dates.append(d)
-        forecast_values.append(round(base + (i % 5) * 1.5, 2))
-
-    # Precomputed metrics (API returns these; no frontend computation)
-    metrics = {"mae": 2.34, "rmse": 3.01, "mape": 0.042}
-    result: dict[str, Any] = {
-        "entity_id": eid,
-        "entity_ids": entity_ids,
-        "actual": [{"date": d, "value": v} for d, v in zip(actual_dates, actual_values)],
-        "forecast": [{"date": d, "value": v} for d, v in zip(forecast_dates, forecast_values)],
-        "metrics": metrics,
-        "model_name": "LightGBM",
-        "horizon": horizon,
-    }
-    if include_baseline:
-        baseline_values = [round(v - 0.5 + (i % 4) * 0.2, 2) for i, v in enumerate(forecast_values)]
-        result["baseline"] = [{"date": d, "value": v} for d, v in zip(forecast_dates, baseline_values)]
-        result["baseline_metrics"] = {"mae": 2.89, "rmse": 3.52, "mape": 0.051}
-        result["baseline_model_name"] = "Baseline"
-    return result
+    return _cached_forecast_vs_actual_api(entity_id, horizon, include_baseline)

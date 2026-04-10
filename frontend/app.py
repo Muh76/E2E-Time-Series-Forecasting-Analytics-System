@@ -1,8 +1,8 @@
 """
 Time Series Forecasting & Analytics — Streamlit app entry point.
 
-Sets page config, loads backend API base URL from config, and routes to pages.
-Streamlit's native pages/ folder provides automatic sidebar navigation.
+Sets page config and sidebar. Backend base URL: environment variable API_URL
+(default http://127.0.0.1:8001 when unset), then config ``frontend.api_base_url``.
 """
 
 import sys
@@ -13,16 +13,14 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-import frontend  # noqa: F401 — runs frontend/__init__.py, which adds frontend dir for components.*
+import os  # noqa: E402
 
-import os
-from pathlib import Path
+import streamlit as st  # noqa: E402
+import yaml  # noqa: E402
+from components.api import check_api_health, get_api_base_url  # noqa: E402
+from components.ui import render_empty, render_warning  # noqa: E402
 
-import streamlit as st
-import yaml
-
-from components.api import check_api_health, get_api_base_url
-from components.ui import render_empty, render_warning
+import frontend  # noqa: E402, F401 — runs frontend/__init__.py, which adds frontend dir for components.*
 
 
 def load_page_config():
@@ -67,12 +65,16 @@ def render_sidebar():
     st.sidebar.markdown("---")
 
     api_base = get_api_base_url()
-    st.sidebar.caption(f"API: `{api_base}`")
+    st.sidebar.caption(f"API base URL: `{api_base}`")
+    st.sidebar.caption("Override with environment variable **API_URL** (default `http://127.0.0.1:8001`).")
 
     if check_api_health():
         st.sidebar.success("API reachable")
     else:
-        render_warning("API unreachable — mock data in use.", sidebar=True)
+        render_warning(
+            "API unreachable. Start the FastAPI server and check API_URL.",
+            sidebar=True,
+        )
 
     st.sidebar.markdown("---")
 

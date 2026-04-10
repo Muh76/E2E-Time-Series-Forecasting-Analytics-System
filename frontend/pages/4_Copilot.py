@@ -1,11 +1,12 @@
 """
 Insight Copilot — rule-based explanations from monitoring and drift context.
-No forecasting logic; uses backend POST /api/v1/copilot/explain when available.
+Uses backend POST /api/v1/copilot/explain.
 """
 
+import requests
 import streamlit as st
-from components.api import copilot_explain, get_monitoring_summary
-from components.ui import LOADING_COPIOT_MESSAGE, render_warning, with_loading
+from components.api import copilot_explain, describe_request_error, get_monitoring_summary
+from components.ui import LOADING_COPIOT_MESSAGE, render_error, render_warning, with_loading
 
 
 def _summary_only(summary: dict) -> dict:
@@ -44,7 +45,11 @@ def main() -> None:
                 "timestamp": alert_context.get("timestamp"),
             },
         }
-        result = with_loading(copilot_explain, query=query, context=context, message=LOADING_COPIOT_MESSAGE)
+        try:
+            result = with_loading(copilot_explain, query=query, context=context, message=LOADING_COPIOT_MESSAGE)
+        except requests.RequestException as exc:
+            render_error(describe_request_error(exc))
+            return
 
         st.text_input(
             "Enter your question",
@@ -94,7 +99,11 @@ def main() -> None:
                 }
                 return copilot_explain(query=query.strip(), context=context)
 
-            result = with_loading(_fetch_and_explain, message=LOADING_COPIOT_MESSAGE)
+            try:
+                result = with_loading(_fetch_and_explain, message=LOADING_COPIOT_MESSAGE)
+            except requests.RequestException as exc:
+                render_error(describe_request_error(exc))
+                return
 
             explanation = result.get("explanation", "")
             sources = result.get("sources", [])
