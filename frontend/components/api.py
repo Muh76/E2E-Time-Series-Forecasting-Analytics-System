@@ -465,3 +465,21 @@ def get_forecast_vs_actual(
     GET /api/v1/forecasts/vs-actual. Raises if the route is unavailable.
     """
     return _cached_forecast_vs_actual_api(entity_id, horizon, include_baseline)
+
+
+def chat_query(message: str) -> dict[str, Any]:
+    """
+    POST /api/v1/chat/query — RAG-backed documentation chat.
+
+    Returns dict with keys:
+      - status: "ok"
+      - reply: grounded answer string
+      - sources: list of {source, header, score}
+      - generated_at: ISO-8601 UTC timestamp
+
+    Raises requests.HTTPError (503) when the FAISS index has not been built yet.
+    """
+    url = api_url("/api/v1/chat/query")
+    resp = requests.post(url, json={"message": message}, timeout=30)
+    resp.raise_for_status()
+    return resp.json()

@@ -1,16 +1,24 @@
 """
-RAG service: unified FAISS index and chunk metadata loading.
+RAG service: FAISS index loading and vector search.
 
-- FAISS index: data/faiss_index.bin
-- Metadata: data/chunk_metadata.pkl
+- FAISS index: data/faiss_index.bin   (built by scripts/generate_rag_index.py)
+- Metadata:    data/chunk_metadata.pkl
 No data/indices/* paths. Ingestion logic is separate.
 """
 
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
-from backend.app.runtime_paths import project_root
+import numpy as np
+
+# HuggingFace fast tokenizers use Rust-based parallelism that deadlocks in
+# forked processes (e.g. uvicorn workers on macOS).  Must be set before any
+# tokenizers import; setting it here ensures it's always in effect.
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+
+from backend.app.runtime_paths import project_root  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +28,7 @@ CHUNK_METADATA_PATH = "data/chunk_metadata.pkl"
 
 _index = None
 _metadata = None
+_embed_model = None
 
 
 def _resolve_path(relative_path: str, base_dir: Path | None = None) -> Path:
@@ -108,3 +117,63 @@ def get_index() -> Any | None:
 def get_metadata() -> list[Any] | None:
     """Return currently loaded chunk metadata (or None)."""
     return _metadata
+
+
+# ---------------------------------------------------------------------------
+# Embedding model (singleton, lazy-loaded on first search)
+# ---------------------------------------------------------------------------
+
+
+def _get_embed_model() -> Any | None:
+    """Lazy-load the sentence-transformers model once; return None on import failure."""
+    global _embed_model
+    if _embed_model is not None:
+        return _embed_model
+    try:
+        from sentence_transformers import SentenceTransformer
+
+        _embed_model = SentenceTransformer("all-MiniLM-L6-v2")
+        logger.info("RAG embedding model loaded: all-MiniLM-L6-v2")
+    except ImportError:
+        logger.error("sentence-transformers not installed; run: pip install sentence-transformers")
+    except Exception as exc:
+        logger.exception("Failed to load embedding model: %s", exc)
+    return _embed_model
+
+
+# ---------------------------------------------------------------------------
+# Vector search
+# ---------------------------------------------------------------------------
+
+
+def search(query: str, k: int = 5) -> list[dict]:
+    """
+    Embed *query* and return the top-k most similar chunks from the FAISS index.
+
+    Each result is a dict with keys: source, header, text, score.
+    Returns [] when the index is not loaded, the embedding model is unavailable,
+    or an unexpected error occurs — callers should degrade gracefully.
+    """
+    if _index is None or _metadata is None:
+        logger.warning("RAG search: index or metadata not loaded")
+        return []
+
+    model = _get_embed_model()
+    if model is None:
+        return []
+
+    try:
+        vec = model.encode([query], normalize_embeddings=True)
+        vec = np.array(vec, dtype="float32")
+        n = min(k, _index.ntotal)
+        scores, indices = _index.search(vec, n)
+        results: list[dict] = []
+        for score, idx in zip(scores[0], indices[0]):
+            if 0 <= idx < len(_metadata):
+                chunk = dict(_metadata[idx])
+                chunk["score"] = float(score)
+                results.append(chunk)
+        return results
+    except Exception as exc:
+        logger.exception("RAG search failed: %s", exc)
+        return []

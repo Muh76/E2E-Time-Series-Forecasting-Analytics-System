@@ -27,6 +27,9 @@ artifacts/*
 node_modules/
 tsconfig.tsbuildinfo
 
+# Claude Code session data
+.claude/
+
 # IDE
 .idea/
 .vscode/

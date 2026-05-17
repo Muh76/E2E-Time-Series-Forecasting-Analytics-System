@@ -32,9 +32,26 @@ def get_valid_store_ids() -> set[int]:
                 pq,
             )
             return set()
-        ids = pd.read_parquet(pq, columns=["store_id"])["store_id"]
-        _valid_store_ids = set(ids.unique().tolist())
-        logger.info("Loaded %d valid store IDs from %s", len(_valid_store_ids), pq)
+        try:
+            ids = pd.read_parquet(pq, columns=["store_id"])["store_id"]
+            _valid_store_ids = set(ids.unique().tolist())
+            logger.info("Loaded %d valid store IDs from %s", len(_valid_store_ids), pq)
+        except ImportError as exc:
+            # Keep API alive when parquet engines are missing (e.g., pyarrow).
+            logger.error(
+                "Cannot load valid store IDs from %s due to missing parquet engine: %s. "
+                "Install pyarrow/fastparquet to enable strict store_id validation.",
+                pq,
+                exc,
+            )
+            _valid_store_ids = set()
+        except (KeyError, ValueError, OSError) as exc:
+            logger.error(
+                "Cannot load valid store IDs from %s: %s. " "Store ID validation will be skipped for this process.",
+                pq,
+                exc,
+            )
+            _valid_store_ids = set()
     return _valid_store_ids
 
 

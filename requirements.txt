@@ -13,6 +13,10 @@ pydantic>=2.5.0
 openai>=1.40.0
 python-dotenv>=1.0.0
 
+# RAG / vector search
+faiss-cpu==1.7.4
+sentence-transformers>=2.6.0,<3.0
+
 # Smoke test / HTTP client
 requests>=2.31.0
 

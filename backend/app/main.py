@@ -14,8 +14,10 @@ from backend.app.api.v1.metrics_endpoint import router as forecast_metrics_route
 from backend.app.api.v1.model_info import router as model_info_router
 from backend.app.api.v1.monitoring import router as monitoring_router
 from backend.app.api.v1.predict import router as predict_router
+from backend.app.runtime_paths import chunk_metadata_file, faiss_index_file
 from backend.app.services.model_loader import load_baseline_model, load_feature_columns, load_primary_model
 from backend.app.services.monitoring_service import initialize_monitoring_state
+from backend.app.services.rag_service import _get_embed_model, get_faiss_and_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +54,17 @@ async def startup_load_models() -> None:
         initialize_monitoring_state()
     except Exception as exc:
         logger.warning("Monitoring initialization failed (non-fatal): %s", exc)
+    try:
+        get_faiss_and_metadata(
+            index_path=faiss_index_file(),
+            metadata_path=chunk_metadata_file(),
+        )
+        # Load the embedding model synchronously — blocking the event loop briefly
+        # during startup is acceptable (no requests are served yet) and avoids
+        # PyTorch threading issues that arise when loading inside asyncio.to_thread.
+        _get_embed_model()
+    except Exception as exc:
+        logger.warning("RAG index initialization failed (non-fatal): %s", exc)
 
 
 @app.get("/health/live")
