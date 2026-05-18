@@ -1,16 +1,42 @@
-# Copy to terraform.tfvars and fill in real values.
-# NEVER commit terraform.tfvars — it may contain secrets.
+# Copy this file to terraform.tfvars and fill in real values.
+# NEVER commit terraform.tfvars — it contains secrets.
+# Add terraform.tfvars to .gitignore if not already there.
 
-project_id    = "your-gcp-project-id"
-region        = "europe-west1"
-app_env       = "prod"
+# -----------------------------------------------------------------------
+# Required
+# -----------------------------------------------------------------------
+
+project_id = "your-gcp-project-id"
+region     = "europe-west1"
+app_env    = "prod"
+
+# Docker image to deploy (built by CI/CD and pushed to Artifact Registry)
 backend_image = "europe-west1-docker.pkg.dev/your-gcp-project-id/forecasting-backend/backend:latest"
 
-# Optional: Secret Manager path for the OpenAI API key
-# openai_secret_version = "projects/your-gcp-project-id/secrets/openai-api-key/versions/latest"
+# OpenAI API key — stored in Secret Manager, injected at runtime
+# Leave empty ("") to skip Secret Manager secret creation
+openai_api_key = ""
 
-# Scaling (adjust to budget/load)
-backend_min_instances = 0
+# -----------------------------------------------------------------------
+# Storage
+# -----------------------------------------------------------------------
+
+gcs_location = "EU"   # EU | US | ASIA
+
+# -----------------------------------------------------------------------
+# Cloud Run scaling
+# -----------------------------------------------------------------------
+
+backend_min_instances = 0    # 0 = scale to zero (cheapest)
 backend_max_instances = 4
 backend_memory        = "2Gi"
 backend_cpu           = "1"
+backend_concurrency   = 80
+
+# -----------------------------------------------------------------------
+# Cloud Scheduler
+# -----------------------------------------------------------------------
+
+etl_schedule      = "0 2 * * *"   # Daily at 02:00 UTC
+training_schedule = "0 4 * * 0"   # Weekly on Sunday at 04:00 UTC
+scheduler_timezone = "UTC"
