@@ -4,13 +4,13 @@ variable "project_id" {
 }
 
 variable "region" {
-  description = "GCP region for Cloud Run and GCS"
+  description = "GCP region for all regional resources (Cloud Run, Artifact Registry)"
   type        = string
   default     = "europe-west1"
 }
 
 variable "app_env" {
-  description = "Application environment (local | staging | prod)"
+  description = "Application environment: local | staging | prod"
   type        = string
   default     = "prod"
   validation {
@@ -19,9 +19,24 @@ variable "app_env" {
   }
 }
 
-variable "backend_image" {
-  description = "Full Docker image URI for the backend service (e.g. europe-west1-docker.pkg.dev/PROJECT/repo/backend:tag)"
+# ---------------------------------------------------------------------------
+# GCS
+# ---------------------------------------------------------------------------
+
+variable "gcs_location" {
+  description = "GCS multi-region location for all buckets (EU | US | ASIA)"
   type        = string
+  default     = "EU"
+}
+
+# ---------------------------------------------------------------------------
+# Cloud Run
+# ---------------------------------------------------------------------------
+
+variable "backend_image" {
+  description = "Full Docker image URI (e.g. europe-west1-docker.pkg.dev/PROJECT/repo/backend:tag)"
+  type        = string
+  default     = "europe-docker.pkg.dev/PROJECT_ID/forecasting-backend/backend:latest"
 }
 
 variable "backend_cpu" {
@@ -37,37 +52,52 @@ variable "backend_memory" {
 }
 
 variable "backend_min_instances" {
-  description = "Minimum number of backend Cloud Run instances (0 = scale to zero)"
+  description = "Minimum Cloud Run instances (0 = scale to zero)"
   type        = number
   default     = 0
 }
 
 variable "backend_max_instances" {
-  description = "Maximum number of backend Cloud Run instances"
+  description = "Maximum Cloud Run instances"
   type        = number
   default     = 4
 }
 
 variable "backend_concurrency" {
-  description = "Maximum concurrent requests per backend instance"
+  description = "Max concurrent requests per Cloud Run instance"
   type        = number
   default     = 80
 }
 
-variable "openai_secret_version" {
-  description = "Secret Manager secret version for OPENAI_API_KEY (e.g. projects/PROJECT/secrets/openai-api-key/versions/latest)"
+# ---------------------------------------------------------------------------
+# Secret Manager
+# ---------------------------------------------------------------------------
+
+variable "openai_api_key" {
+  description = "OpenAI API key value — stored in Secret Manager, never in state as plaintext"
   type        = string
+  sensitive   = true
   default     = ""
 }
 
-variable "artifacts_bucket_location" {
-  description = "GCS multi-region location for the artifacts bucket"
+# ---------------------------------------------------------------------------
+# Cloud Scheduler
+# ---------------------------------------------------------------------------
+
+variable "etl_schedule" {
+  description = "Cron schedule for the daily ETL job (UTC)"
   type        = string
-  default     = "EU"
+  default     = "0 2 * * *"
 }
 
-variable "data_bucket_location" {
-  description = "GCS multi-region location for the data bucket"
+variable "training_schedule" {
+  description = "Cron schedule for the weekly model training job (UTC)"
   type        = string
-  default     = "EU"
+  default     = "0 4 * * 0"
+}
+
+variable "scheduler_timezone" {
+  description = "Timezone for Cloud Scheduler jobs"
+  type        = string
+  default     = "UTC"
 }
