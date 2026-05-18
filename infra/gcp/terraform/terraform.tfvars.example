@@ -1,0 +1,16 @@
+# Copy to terraform.tfvars and fill in real values.
+# NEVER commit terraform.tfvars — it may contain secrets.
+
+project_id    = "your-gcp-project-id"
+region        = "europe-west1"
+app_env       = "prod"
+backend_image = "europe-west1-docker.pkg.dev/your-gcp-project-id/forecasting-backend/backend:latest"
+
+# Optional: Secret Manager path for the OpenAI API key
+# openai_secret_version = "projects/your-gcp-project-id/secrets/openai-api-key/versions/latest"
+
+# Scaling (adjust to budget/load)
+backend_min_instances = 0
+backend_max_instances = 4
+backend_memory        = "2Gi"
+backend_cpu           = "1"
