@@ -2,6 +2,8 @@
 OpenAI-backed Copilot explanations: natural language from forecast, metrics, and drift.
 
 Requires ``OPENAI_API_KEY``. Optional ``OPENAI_COPILOT_MODEL`` (default ``gpt-4o-mini``).
+Prompt strings are loaded from copilot/prompts/ so wording can be changed without
+editing Python code.
 """
 
 from __future__ import annotations
@@ -13,6 +15,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from backend.app.services.copilot_explain import detect_query_intents
+from copilot.prompts import load_system_prompt, render_user_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -72,29 +75,12 @@ async def explain_with_openai(query: str, context: dict[str, Any]) -> dict[str, 
 
     fc_json, metrics_json, drift_json = _pack_llm_payload(context)
 
-    user_prompt = f"""Explain this forecast based on the following data.
-
-Write as a helpful analyst for a business stakeholder: clear, natural, and human.
-Avoid jargon dumps unless the user asked for them.
-
-User question:
-{query}
-
-## Forecast (series and record metadata)
-{_clip_json(fc_json)}
-
-## Metrics (holdout / last-run performance and evaluation status)
-{_clip_json(metrics_json)}
-
-## Drift (distribution shift vs training / reference window)
-{_clip_json(drift_json)}
-
-Respond with a single JSON object only (no markdown code fences), with exactly these keys:
-- "answer": string, 2–6 sentences in plain language; tie forecast path, errors, and drift to the question
-- "reasoning": string, short markdown bullets citing fields you used (MAE, MAPE, overall_score, points, etc.)
-- "confidence": number from 0 to 1 for how well the supplied data supports the answer
-
-If forecast, metrics, or drift blocks are empty or sparse, say so honestly instead of inventing values."""
+    user_prompt = render_user_prompt(
+        query=query,
+        forecast_json=_clip_json(fc_json),
+        metrics_json=_clip_json(metrics_json),
+        drift_json=_clip_json(drift_json),
+    )
 
     try:
         from openai import AsyncOpenAI
@@ -103,16 +89,7 @@ If forecast, metrics, or drift blocks are empty or sparse, say so honestly inste
         resp = await client.chat.completions.create(
             model=model,
             messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a senior forecasting analyst helping a teammate understand model output. "
-                        "Sound natural and conversational while staying faithful to the JSON context only — "
-                        "never invent metrics, dates, or drift scores. "
-                        "If the data is insufficient for a strong claim, soften your language. "
-                        "Output valid JSON only, matching the user's requested schema."
-                    ),
-                },
+                {"role": "system", "content": load_system_prompt()},
                 {"role": "user", "content": user_prompt},
             ],
             temperature=0.45,
