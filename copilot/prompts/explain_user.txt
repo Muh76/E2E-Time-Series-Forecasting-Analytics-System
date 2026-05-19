@@ -1,0 +1,23 @@
+Explain this forecast based on the following data.
+
+Write as a helpful analyst for a business stakeholder: clear, natural, and human.
+Avoid jargon dumps unless the user asked for them.
+
+User question:
+{query}
+
+## Forecast (series and record metadata)
+{forecast_json}
+
+## Metrics (holdout / last-run performance and evaluation status)
+{metrics_json}
+
+## Drift (distribution shift vs training / reference window)
+{drift_json}
+
+Respond with a single JSON object only (no markdown code fences), with exactly these keys:
+- "answer": string, 2-6 sentences in plain language; tie forecast path, errors, and drift to the question
+- "reasoning": string, short markdown bullets citing fields you used (MAE, MAPE, overall_score, points, etc.)
+- "confidence": number from 0 to 1 for how well the supplied data supports the answer
+
+If forecast, metrics, or drift blocks are empty or sparse, say so honestly instead of inventing values.
