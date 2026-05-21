@@ -183,7 +183,9 @@ def main() -> None:
     train_df, val_df = time_based_split(featured, date_col, val_frac)
     logger.info(
         "Time-based split: val_frac=%.2f, train_rows=%d, val_rows=%d",
-        val_frac, len(train_df), len(val_df),
+        val_frac,
+        len(train_df),
+        len(val_df),
     )
     if val_df.empty:
         logger.warning("Validation set is empty; cannot evaluate. Train only.")
@@ -215,8 +217,7 @@ def main() -> None:
     # --- Post-fit leakage and consistency checks ---
     if "target_raw" in primary._feature_cols:
         raise ValueError(
-            "Leakage detected post-fit: 'target_raw' is in feature_cols. "
-            "Aborting before saving any artifact."
+            "Leakage detected post-fit: 'target_raw' is in feature_cols. " "Aborting before saving any artifact."
         )
     logger.info(
         "Leakage check passed: 'target_raw' is NOT in feature_cols (%d features).",
@@ -225,11 +226,11 @@ def main() -> None:
     lgb_feature_names = list(primary._model.feature_name_)
     if lgb_feature_names != primary._feature_cols:
         logger.error(
-            "feature_name_ MISMATCH with _feature_cols!\n"
-            "  _feature_cols  (%d): %s\n"
-            "  feature_name_  (%d): %s",
-            len(primary._feature_cols), primary._feature_cols,
-            len(lgb_feature_names), lgb_feature_names,
+            "feature_name_ MISMATCH with _feature_cols!\n" "  _feature_cols  (%d): %s\n" "  feature_name_  (%d): %s",
+            len(primary._feature_cols),
+            primary._feature_cols,
+            len(lgb_feature_names),
+            lgb_feature_names,
         )
         raise ValueError("model.feature_name_ does not match _feature_cols — aborting.")
     logger.info(
@@ -246,12 +247,8 @@ def main() -> None:
         pred_baseline = baseline.predict(train_df, horizon, train_config)
         pred_primary = primary.predict(train_df, horizon, train_config)
 
-        y_true_b, y_pred_b, eids_b = align_forecasts_to_actuals(
-            pred_baseline, val_df, date_col, target_col, entity_col
-        )
-        y_true_p, y_pred_p, eids_p = align_forecasts_to_actuals(
-            pred_primary, val_df, date_col, target_col, entity_col
-        )
+        y_true_b, y_pred_b, eids_b = align_forecasts_to_actuals(pred_baseline, val_df, date_col, target_col, entity_col)
+        y_true_p, y_pred_p, eids_p = align_forecasts_to_actuals(pred_primary, val_df, date_col, target_col, entity_col)
 
         eids_b_arg = eids_b if eids_b and eids_b[0] is not None else None
         eids_p_arg = eids_p if eids_p and eids_p[0] is not None else None
@@ -262,11 +259,15 @@ def main() -> None:
 
         logger.info(
             "Validation metrics (baseline): MAE=%.4f, RMSE=%.4f, MAPE=%.2f%%",
-            metrics_baseline["mae"], metrics_baseline["rmse"], metrics_baseline["mape"],
+            metrics_baseline["mae"],
+            metrics_baseline["rmse"],
+            metrics_baseline["mape"],
         )
         logger.info(
             "Validation metrics (primary):  MAE=%.4f, RMSE=%.4f, MAPE=%.2f%%",
-            metrics_primary["mae"], metrics_primary["rmse"], metrics_primary["mape"],
+            metrics_primary["mae"],
+            metrics_primary["rmse"],
+            metrics_primary["mape"],
         )
 
     # Save artifacts to artifacts/models/
@@ -283,9 +284,7 @@ def main() -> None:
     feature_columns_path = models_dir / "feature_columns.json"
     with open(feature_columns_path, "w") as f:
         json.dump(primary._feature_cols, f, indent=2)
-    logger.info(
-        "Saved feature columns (%d): %s", len(primary._feature_cols), feature_columns_path
-    )
+    logger.info("Saved feature columns (%d): %s", len(primary._feature_cols), feature_columns_path)
 
     if metrics_log:
         metrics_path = models_dir / "metrics.json"
@@ -336,9 +335,7 @@ def main() -> None:
             X_fit[c] = X_fit[c].astype("category")
     for c in primary._category_levels:
         if c in X_fit.columns:
-            X_fit[c] = X_fit[c].astype("category").cat.set_categories(
-                primary._category_levels[c]
-            )
+            X_fit[c] = X_fit[c].astype("category").cat.set_categories(primary._category_levels[c])
     y_hat_train = primary._model.predict(X_fit)
     train_residuals = np.array(y_fit) - np.array(y_hat_train)
 
@@ -348,7 +345,8 @@ def main() -> None:
         residual_std = float(np.std(val_residuals))
         logger.info(
             "residual_std computed from validation set (%d samples): %.4f",
-            len(val_residuals), residual_std,
+            len(val_residuals),
+            residual_std,
         )
     else:
         residual_std = float(np.std(train_residuals))
@@ -396,10 +394,7 @@ def main() -> None:
                 key=lambda x: x[1],
                 reverse=True,
             )
-            feature_importance = [
-                {"feature": name, "importance": round(float(val), 6)}
-                for name, val in pairs[:15]
-            ]
+            feature_importance = [{"feature": name, "importance": round(float(val), 6)} for name, val in pairs[:15]]
             logger.info(
                 "Extracted top %d feature importances (max=%.4f)",
                 len(feature_importance),

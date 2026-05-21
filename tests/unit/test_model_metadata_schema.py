@@ -12,7 +12,6 @@ from pydantic import ValidationError
 
 from backend.app.schemas.model_metadata import ModelMetadataResponse
 
-
 VALID_METADATA: dict = {
     "model_version": "v5",
     "trained_at": "2026-01-30T12:00:00Z",
@@ -157,8 +156,7 @@ class TestModelMetadataSchema:
     def test_feature_importance_max_15_items(self):
         data = copy.deepcopy(VALID_METADATA)
         data["feature_importance"] = [
-            {"feature": f"feat_{i}", "importance": round(1.0 / (i + 1), 4)}
-            for i in range(15)
+            {"feature": f"feat_{i}", "importance": round(1.0 / (i + 1), 4)} for i in range(15)
         ]
         m = ModelMetadataResponse(**data)
         assert len(m.feature_importance) == 15

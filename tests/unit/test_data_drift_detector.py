@@ -13,7 +13,6 @@ import pytest
 
 from models.monitoring.drift import DataDriftDetector
 
-
 # ---------------------------------------------------------------------------
 # Fixtures: small synthetic DataFrames
 # ---------------------------------------------------------------------------
@@ -74,10 +73,12 @@ def test_shifted_mean_drift_detected(ref_df, config_low_threshold):
     detector = DataDriftDetector(config_low_threshold)
     detector.fit_reference(ref_df)
     # Current: values 51..70 (shifted from 1..20); bins from ref are 1..20, so current all in last bin
-    current_df = pd.DataFrame({
-        "x": np.arange(51.0, 71.0),
-        "y": np.arange(51.0, 71.0) * 2,
-    })
+    current_df = pd.DataFrame(
+        {
+            "x": np.arange(51.0, 71.0),
+            "y": np.arange(51.0, 71.0) * 2,
+        }
+    )
     result = detector.detect_drift(current_df)
     assert result["overall_score"] > 0.2
     assert result["drift_detected"] is True
@@ -87,10 +88,12 @@ def test_shifted_mean_with_high_threshold_no_drift(ref_df, config_high_threshold
     """Shifted distribution but threshold very high (5.0) → drift_detected False (score max ~2)."""
     detector = DataDriftDetector(config_high_threshold)
     detector.fit_reference(ref_df)
-    current_df = pd.DataFrame({
-        "x": np.arange(51.0, 71.0),
-        "y": np.arange(51.0, 71.0) * 2,
-    })
+    current_df = pd.DataFrame(
+        {
+            "x": np.arange(51.0, 71.0),
+            "y": np.arange(51.0, 71.0) * 2,
+        }
+    )
     result = detector.detect_drift(current_df)
     assert result["drift_detected"] is False
     assert result["overall_score"] <= 2.0

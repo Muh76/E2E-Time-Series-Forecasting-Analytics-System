@@ -35,10 +35,14 @@ class CopilotOrchestrator:
     """
 
     def __init__(self, chain: list[CopilotAgent] | None = None) -> None:
-        self._chain: list[CopilotAgent] = chain if chain is not None else [
-            OpenAIExplainAgent(),
-            RulesBasedAgent(),
-        ]
+        self._chain: list[CopilotAgent] = (
+            chain
+            if chain is not None
+            else [
+                OpenAIExplainAgent(),
+                RulesBasedAgent(),
+            ]
+        )
 
     async def run(self, query: str, context: dict[str, Any]) -> dict[str, Any]:
         """Execute the agent chain and return the first successful result."""

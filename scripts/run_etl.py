@@ -38,6 +38,7 @@ logger = logging.getLogger(__name__)
 # Config
 # ---------------------------------------------------------------------------
 
+
 def load_config(env: str | None = None) -> dict:
     """Load base YAML config, optionally merging an environment overlay."""
     config_dir = PROJECT_ROOT / "config"
@@ -54,11 +55,7 @@ def load_config(env: str | None = None) -> dict:
             with open(env_path) as f:
                 env_config = yaml.safe_load(f) or {}
             for key, val in env_config.items():
-                if (
-                    key in config
-                    and isinstance(config[key], dict)
-                    and isinstance(val, dict)
-                ):
+                if key in config and isinstance(config[key], dict) and isinstance(val, dict):
                     config[key] = {**config[key], **val}
                 else:
                     config[key] = val
@@ -68,6 +65,7 @@ def load_config(env: str | None = None) -> dict:
 # ---------------------------------------------------------------------------
 # Path resolution
 # ---------------------------------------------------------------------------
+
 
 def _resolve_paths(
     args: argparse.Namespace,
@@ -114,6 +112,7 @@ def _build_pipeline_config(
 # Summary logging
 # ---------------------------------------------------------------------------
 
+
 def _log_summary(df: pd.DataFrame, pipeline_mode: str, pipeline_config: dict) -> None:
     """Log a human-readable summary of the ETL output."""
     if pipeline_mode == "rossmann":
@@ -136,12 +135,16 @@ def _log_rossmann_summary(df: pd.DataFrame) -> None:
     if len(dates) > 0:
         logger.info(
             "Summary: dataset=rossmann, rows=%d, date_min=%s, date_max=%s, stores=%d",
-            len(df), dates.min(), dates.max(), n_stores,
+            len(df),
+            dates.min(),
+            dates.max(),
+            n_stores,
         )
     else:
         logger.info(
             "Summary: dataset=rossmann, rows=%d, stores=%d",
-            len(df), n_stores,
+            len(df),
+            n_stores,
         )
 
 
@@ -160,7 +163,9 @@ def _log_generic_summary(df: pd.DataFrame, pipeline_config: dict) -> None:
     if len(dates) > 0:
         logger.info(
             "Summary: rows=%d, date_min=%s, date_max=%s",
-            len(df), dates.min(), dates.max(),
+            len(df),
+            dates.min(),
+            dates.max(),
         )
     else:
         logger.info("Summary: rows=%d", len(df))
@@ -170,6 +175,7 @@ def _log_generic_summary(df: pd.DataFrame, pipeline_config: dict) -> None:
 # Entry point
 # ---------------------------------------------------------------------------
 
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run ETL pipeline and save processed data.",
@@ -178,8 +184,7 @@ def _parse_args() -> argparse.Namespace:
         "--raw-file",
         type=Path,
         default=None,
-        help="Path to raw CSV (default: data/raw/target.csv). "
-             "Ignored when --pipeline-mode rossmann.",
+        help="Path to raw CSV (default: data/raw/target.csv). " "Ignored when --pipeline-mode rossmann.",
     )
     parser.add_argument(
         "--output-file",
@@ -191,8 +196,7 @@ def _parse_args() -> argparse.Namespace:
         "--env",
         type=str,
         default=None,
-        help="Config env to merge (e.g. local, staging, prod). "
-             "Uses APP_ENV if not set.",
+        help="Config env to merge (e.g. local, staging, prod). " "Uses APP_ENV if not set.",
     )
     parser.add_argument(
         "--pipeline-mode",
@@ -226,7 +230,9 @@ def main() -> None:
 
     logger.info(
         "Starting ETL: raw=%s, output=%s, mode=%s",
-        raw_file, output_file, args.pipeline_mode,
+        raw_file,
+        output_file,
+        args.pipeline_mode,
     )
 
     df = run_pipeline(

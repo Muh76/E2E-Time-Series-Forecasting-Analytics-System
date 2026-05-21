@@ -36,6 +36,7 @@ def _load_dotenv() -> None:
         return
     try:
         from dotenv import load_dotenv
+
         load_dotenv(env_file)
     except ImportError:
         # Manually parse the file if python-dotenv isn't installed yet.

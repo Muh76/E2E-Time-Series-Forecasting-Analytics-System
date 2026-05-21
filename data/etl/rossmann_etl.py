@@ -155,9 +155,16 @@ class RossmannETL:
             AssertionError: If date is not strictly increasing per store_id after cleaning.
         """
         required = {
-            "date", "store_id", "target_cleaned", "open", "promo",
-            "school_holiday", "competition_distance", "state_holiday",
-            "store_type", "assortment",
+            "date",
+            "store_id",
+            "target_cleaned",
+            "open",
+            "promo",
+            "school_holiday",
+            "competition_distance",
+            "state_holiday",
+            "store_type",
+            "assortment",
         }
         missing = required - set(df.columns)
         if missing:

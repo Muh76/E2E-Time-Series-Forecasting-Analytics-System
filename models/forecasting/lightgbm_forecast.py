@@ -19,9 +19,11 @@ MODEL_NAME = "lightgbm"
 # Columns that must NEVER be used as model features regardless of what is in the DataFrame.
 # target_raw is the un-cleaned sales value — essentially the same signal as target_cleaned,
 # causing severe data leakage (confirmed gain 1000× higher than any lag feature).
-_NEVER_FEATURE_COLS: frozenset[str] = frozenset({
-    "target_raw",   # raw sales before cleaning — leaks target signal
-})
+_NEVER_FEATURE_COLS: frozenset[str] = frozenset(
+    {
+        "target_raw",  # raw sales before cleaning — leaks target signal
+    }
+)
 
 
 def _get_feature_columns(
@@ -123,9 +125,7 @@ class LightGBMForecast(BaseForecastingModel):
         if self._entity_col is not None and self._entity_col not in train_df.columns:
             raise ValueError(f"entity_column '{self._entity_col}' not in DataFrame.")
 
-        self._feature_cols = _get_feature_columns(
-            train_df, self._date_col, self._target_col, self._entity_col
-        )
+        self._feature_cols = _get_feature_columns(train_df, self._date_col, self._target_col, self._entity_col)
         if not self._feature_cols:
             raise ValueError("No feature columns found; need lags, rolling, or calendar features.")
 
@@ -139,21 +139,20 @@ class LightGBMForecast(BaseForecastingModel):
             )
 
         # Log final feature set for full transparency
-        logger.info(
-            "Feature columns (%d): %s", len(self._feature_cols), self._feature_cols
-        )
+        logger.info("Feature columns (%d): %s", len(self._feature_cols), self._feature_cols)
 
         self._cat_cols = [
-            c for c in self._feature_cols
-            if c == self._entity_col
-            or train_df[c].dtype == "object"
-            or train_df[c].dtype.name == "category"
+            c
+            for c in self._feature_cols
+            if c == self._entity_col or train_df[c].dtype == "object" or train_df[c].dtype.name == "category"
         ]
 
         train_sub, val_sub = _time_aware_split(train_df, self._date_col, val_frac)
         logger.info(
             "Time-aware split: train_rows=%d, val_rows=%d, val_frac=%.2f",
-            len(train_sub), len(val_sub), val_frac,
+            len(train_sub),
+            len(val_sub),
+            val_frac,
         )
         # Drop rows with NaN in features or target (e.g. warm-up from lags/rolling)
         X_train = train_sub[self._feature_cols].copy()
@@ -206,16 +205,13 @@ class LightGBMForecast(BaseForecastingModel):
                         X_val[c] = X_val[c].astype("category")
                 for col in self._category_levels:
                     if col in X_val.columns:
-                        X_val[col] = X_val[col].astype("category").cat.set_categories(
-                            self._category_levels[col]
-                        )
+                        X_val[col] = X_val[col].astype("category").cat.set_categories(self._category_levels[col])
                 callbacks = (
-                    [lgb.early_stopping(stopping_rounds=10, verbose=False)]
-                    if cfg.get("early_stopping", True)
-                    else None
+                    [lgb.early_stopping(stopping_rounds=10, verbose=False)] if cfg.get("early_stopping", True) else None
                 )
                 self._model.fit(
-                    X_train, y_train,
+                    X_train,
+                    y_train,
                     eval_set=[(X_val, y_val)],
                     callbacks=callbacks,
                 )
@@ -327,6 +323,7 @@ class LightGBMForecast(BaseForecastingModel):
         if fe_config:
             try:
                 from data.feature_engineering import run_feature_pipeline  # noqa: PLC0415
+
                 run_pipeline = run_feature_pipeline
             except ImportError:
                 logger.warning("data.feature_engineering not importable; recursive features disabled.")
@@ -335,15 +332,14 @@ class LightGBMForecast(BaseForecastingModel):
         lags: list[int] = list((fe_config.get("lag") or {}).get("lags", [1, 7, 14]))
         windows: list[int] = list((fe_config.get("rolling") or {}).get("windows", [7, 14]))
         lookback: int = max(max(lags, default=14), max(windows, default=14))
-        _BUFFER = 5                            # extra rows as safety margin
+        _BUFFER = 5  # extra rows as safety margin
         keep_rows = lookback + _BUFFER
 
         # Identify engineered columns by naming convention so they are excluded from
         # the working base series (they must be recomputed fresh each step).
         _calendar_feature_names = {"day_of_week", "day_of_month", "week_of_year", "month", "is_weekend"}
         _engineered = {
-            c for c in group.columns
-            if c.startswith("lag_") or c.startswith("rolling_") or c in _calendar_feature_names
+            c for c in group.columns if c.startswith("lag_") or c.startswith("rolling_") or c in _calendar_feature_names
         }
         base_cols = [c for c in group.columns if c not in _engineered]
 
@@ -362,9 +358,7 @@ class LightGBMForecast(BaseForecastingModel):
                 placeholder = current_base.iloc[-1].copy()
                 placeholder[self._date_col] = forecast_date
                 placeholder[self._target_col] = float("nan")
-                extended = pd.concat(
-                    [current_base, pd.DataFrame([placeholder])], ignore_index=True
-                )
+                extended = pd.concat([current_base, pd.DataFrame([placeholder])], ignore_index=True)
 
                 # --- Step 2: recompute features on a trimmed tail (performance) ---
                 tail = extended.tail(lookback + 2)
@@ -377,28 +371,32 @@ class LightGBMForecast(BaseForecastingModel):
                 if missing_fc:
                     logger.warning(
                         "Step h=%d: %d feature column(s) absent after pipeline recompute "
-                        "(will be NaN, then filled): %s", h, len(missing_fc), missing_fc,
+                        "(will be NaN, then filled): %s",
+                        h,
+                        len(missing_fc),
+                        missing_fc,
                     )
                 X = featured.iloc[[-1]].reindex(columns=self._feature_cols).copy()
             else:
                 # No pipeline: use stale last row (horizon > 1 will repeat predictions)
                 logger.warning(
                     "Feature pipeline unavailable; step h=%d uses last observed features. "
-                    "Recursive forecasting requires feature_engineering in config.", h,
+                    "Recursive forecasting requires feature_engineering in config.",
+                    h,
                 )
                 X = group.reindex(columns=self._feature_cols).ffill().iloc[[-1]].copy()
 
             # --- Step 4: category alignment then NaN filling ---
             for col in self._category_levels:
                 if col in X.columns:
-                    X[col] = X[col].astype("category").cat.set_categories(
-                        self._category_levels[col]
-                    )
+                    X[col] = X[col].astype("category").cat.set_categories(self._category_levels[col])
             numeric_cols = [c for c in X.columns if pd.api.types.is_numeric_dtype(X[c])]
             nan_count = int(X[numeric_cols].isna().sum().sum()) if numeric_cols else 0
             if nan_count > 0:
                 logger.info(
-                    "Step h=%d: filling %d numeric NaN(s) with 0.", h, nan_count,
+                    "Step h=%d: filling %d numeric NaN(s) with 0.",
+                    h,
+                    nan_count,
                 )
                 X[numeric_cols] = X[numeric_cols].fillna(0)
             # Categorical NaNs left as-is: LightGBM handles missing categories natively
@@ -412,11 +410,9 @@ class LightGBMForecast(BaseForecastingModel):
             predicted_row = current_base.iloc[-1].copy()
             predicted_row[self._date_col] = forecast_date
             predicted_row[self._target_col] = y_pred
-            current_base = pd.concat(
-                [current_base, pd.DataFrame([predicted_row])], ignore_index=True
-            )
+            current_base = pd.concat([current_base, pd.DataFrame([predicted_row])], ignore_index=True)
             # Trim to keep memory and pipeline cost bounded
             if len(current_base) > keep_rows + 1:
-                current_base = current_base.iloc[-(keep_rows + 1):].reset_index(drop=True)
+                current_base = current_base.iloc[-(keep_rows + 1) :].reset_index(drop=True)
 
         return result

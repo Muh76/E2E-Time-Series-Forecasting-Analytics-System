@@ -46,10 +46,21 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 @app.on_event("startup")
 async def startup_load_models() -> None:
     """Load trained models at startup and store in app.state for request-time access."""
-    app.state.primary_model = load_primary_model()
-    app.state.baseline_model = load_baseline_model()
-    app.state.feature_columns = load_feature_columns()
-    logger.info("All models and feature columns loaded and attached to app.state.")
+    app.state.primary_model = None
+    app.state.baseline_model = None
+    app.state.feature_columns = None
+    try:
+        app.state.primary_model = load_primary_model()
+        app.state.baseline_model = load_baseline_model()
+        app.state.feature_columns = load_feature_columns()
+        logger.info("All models and feature columns loaded and attached to app.state.")
+    except Exception as exc:
+        logger.warning(
+            "Model artifacts not found (non-fatal): %s. "
+            "Forecast/predict endpoints will be unavailable until training is run. "
+            "Copilot and monitoring endpoints are unaffected.",
+            exc,
+        )
     try:
         initialize_monitoring_state()
     except Exception as exc:

@@ -73,10 +73,7 @@ def save_parquet(
     out_path = Path(path).resolve()
 
     if not overwrite and out_path.exists():
-        raise FileExistsError(
-            f"Parquet file already exists: {out_path}. "
-            "Pass overwrite=True to replace it."
-        )
+        raise FileExistsError(f"Parquet file already exists: {out_path}. " "Pass overwrite=True to replace it.")
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -128,8 +125,7 @@ def load_parquet(
     in_path = Path(path).resolve()
     if not in_path.exists():
         raise FileNotFoundError(
-            f"Processed ETL Parquet not found: {in_path}. "
-            "Run the ETL pipeline (scripts/run_etl.py) to generate it."
+            f"Processed ETL Parquet not found: {in_path}. " "Run the ETL pipeline (scripts/run_etl.py) to generate it."
         )
 
     df = pd.read_parquet(in_path, columns=columns)

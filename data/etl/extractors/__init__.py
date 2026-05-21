@@ -7,8 +7,8 @@ Public API:
     RossmannETL             Full ETL class for Rossmann train + store CSVs.
 """
 
-from .csv import load_raw_csv, load_retail_sales_csv
 from ..rossmann_etl import RossmannETL
+from .csv import load_raw_csv, load_retail_sales_csv
 
 __all__ = [
     "RossmannETL",

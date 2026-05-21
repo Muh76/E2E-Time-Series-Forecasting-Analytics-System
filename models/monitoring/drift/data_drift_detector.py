@@ -63,10 +63,7 @@ class DataDriftDetector:
             self, for chaining.
         """
         if feature_cols is None:
-            feature_cols = [
-                c for c in reference_df.columns
-                if pd.api.types.is_numeric_dtype(reference_df[c])
-            ]
+            feature_cols = [c for c in reference_df.columns if pd.api.types.is_numeric_dtype(reference_df[c])]
         self._ref_data = reference_df[feature_cols].copy()
         self._bin_edges = {}
         for col in feature_cols:

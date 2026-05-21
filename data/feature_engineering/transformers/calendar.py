@@ -51,7 +51,7 @@ class CalendarTransformer(BaseTimeSeriesTransformer):
 
         dt = pd.to_datetime(df[self._date_col])
         out = pd.DataFrame(index=df.index)
-        out["day_of_week"] = dt.dt.dayofweek.astype("int64")   # 0=Monday, 6=Sunday
+        out["day_of_week"] = dt.dt.dayofweek.astype("int64")  # 0=Monday, 6=Sunday
         out["day_of_month"] = dt.dt.day.astype("int64")
         out["week_of_year"] = dt.dt.isocalendar().week.astype("int64")
         out["month"] = dt.dt.month.astype("int64")

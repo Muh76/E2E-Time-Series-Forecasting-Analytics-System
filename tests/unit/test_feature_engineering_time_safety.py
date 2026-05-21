@@ -16,7 +16,6 @@ from data.feature_engineering.transformers import (
     RollingTransformer,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures: small synthetic DataFrames with known values
 # ---------------------------------------------------------------------------
@@ -161,10 +160,12 @@ def test_rolling_excludes_current_row(single_entity_ordered):
     Rolling uses shift(1).rolling(), so at row t the window is over t-1, t-2, ...
     Values [10, 20, 30, 40, 50]. At last row (50), rolling_mean_3 = mean(20, 30, 40) = 30.
     """
-    df = pd.DataFrame({
-        "date": pd.date_range("2024-01-01", periods=5, freq="D"),
-        "target_cleaned": [10.0, 20.0, 30.0, 40.0, 50.0],
-    })
+    df = pd.DataFrame(
+        {
+            "date": pd.date_range("2024-01-01", periods=5, freq="D"),
+            "target_cleaned": [10.0, 20.0, 30.0, 40.0, 50.0],
+        }
+    )
     cfg = {"date_column": "date", "target_column": "target_cleaned", "windows": [3], "min_periods": 1}
     t = RollingTransformer().fit(df, cfg)
     out = t.transform(df)

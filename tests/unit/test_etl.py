@@ -4,13 +4,12 @@ Unit tests for the ETL pipeline: validation, cleaning, augmentation.
 Run from project root: pytest tests/unit/test_etl.py -v
 """
 
-import pytest
 import pandas as pd
+import pytest
 
-from data.etl.validate import validate_retail, validate_schema, ValidationResult
-from data.etl.clean import clean_retail
 from data.etl.augment import augment_timeseries
-
+from data.etl.clean import clean_retail
+from data.etl.validate import ValidationResult, validate_retail, validate_schema
 
 # ---------------------------------------------------------------------------
 # Fixtures: retail-style DataFrames
@@ -20,30 +19,36 @@ from data.etl.augment import augment_timeseries
 @pytest.fixture
 def df_retail_valid() -> pd.DataFrame:
     """Valid retail series: date, store_id, target; unique (date, store_id); monotonic per store."""
-    return pd.DataFrame({
-        "date": pd.to_datetime(["2020-01-01", "2020-01-02", "2020-01-03", "2020-01-01", "2020-01-02"]),
-        "store_id": ["A", "A", "A", "B", "B"],
-        "target": [100.0, 102.0, 98.0, 200.0, 205.0],
-    })
+    return pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2020-01-01", "2020-01-02", "2020-01-03", "2020-01-01", "2020-01-02"]),
+            "store_id": ["A", "A", "A", "B", "B"],
+            "target": [100.0, 102.0, 98.0, 200.0, 205.0],
+        }
+    )
 
 
 @pytest.fixture
 def df_with_gaps() -> pd.DataFrame:
     """Retail series with missing dates: store A has 2020-01-01 and 2020-01-03 but not 2020-01-02."""
-    return pd.DataFrame({
-        "date": pd.to_datetime(["2020-01-01", "2020-01-03", "2020-01-01", "2020-01-02", "2020-01-03"]),
-        "store_id": ["A", "A", "B", "B", "B"],
-        "target": [10.0, 14.0, 20.0, 22.0, 24.0],
-    })
+    return pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2020-01-01", "2020-01-03", "2020-01-01", "2020-01-02", "2020-01-03"]),
+            "store_id": ["A", "A", "B", "B", "B"],
+            "target": [10.0, 14.0, 20.0, 22.0, 24.0],
+        }
+    )
 
 
 @pytest.fixture
 def df_for_augment() -> pd.DataFrame:
     """Simple series for augmentation: date + target (and optional store_id)."""
-    return pd.DataFrame({
-        "date": pd.to_datetime(["2020-01-01", "2020-01-02", "2020-01-03", "2020-01-04", "2020-01-05"]),
-        "target": [100.0, 101.0, 102.0, 103.0, 104.0],
-    })
+    return pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2020-01-01", "2020-01-02", "2020-01-03", "2020-01-04", "2020-01-05"]),
+            "target": [100.0, 101.0, 102.0, 103.0, 104.0],
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -157,7 +162,14 @@ def test_augment_timeseries_reproducible_with_fixed_seed(df_for_augment: pd.Data
     config = {
         "missing_blocks": {"enabled": True, "n_blocks": 1, "block_size_min": 1, "block_size_max": 2},
         "noise_regime_shift": {"enabled": True, "n_shifts": 1, "scale_before": 0.0, "scale_after": 0.5},
-        "trend_change": {"enabled": True, "n_windows": 1, "window_length_min": 2, "window_length_max": 4, "slope_min": -0.1, "slope_max": 0.1},
+        "trend_change": {
+            "enabled": True,
+            "n_windows": 1,
+            "window_length_min": 2,
+            "window_length_max": 4,
+            "slope_min": -0.1,
+            "slope_max": 0.1,
+        },
     }
     seed = 42
     out1 = augment_timeseries(df_for_augment.copy(), config=config, seed=seed)

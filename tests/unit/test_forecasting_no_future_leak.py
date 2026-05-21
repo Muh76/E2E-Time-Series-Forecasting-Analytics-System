@@ -12,7 +12,6 @@ import pytest
 
 from models.forecasting import LightGBMForecast, SeasonalNaiveForecast
 
-
 # ---------------------------------------------------------------------------
 # Fixtures: synthetic data with clear past vs future
 # ---------------------------------------------------------------------------
@@ -24,10 +23,12 @@ FUTURE_SENTINEL = 999.0
 @pytest.fixture
 def history_past_only_single():
     """Single entity, dates 1..7, values 1..7. No data beyond date 7."""
-    return pd.DataFrame({
-        "date": pd.date_range("2024-01-01", periods=7, freq="D"),
-        "target_cleaned": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
-    })
+    return pd.DataFrame(
+        {
+            "date": pd.date_range("2024-01-01", periods=7, freq="D"),
+            "target_cleaned": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
+        }
+    )
 
 
 @pytest.fixture
@@ -46,11 +47,13 @@ def config_single():
 def history_past_only_two_entities():
     """Two entities (A, B), dates 1..7 each. A: 1..7, B: 10,20..70. No data beyond date 7."""
     dates = pd.date_range("2024-01-01", periods=7, freq="D")
-    return pd.DataFrame({
-        "date": list(dates) * 2,
-        "store_id": ["A"] * 7 + ["B"] * 7,
-        "target_cleaned": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0] + [10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0],
-    })
+    return pd.DataFrame(
+        {
+            "date": list(dates) * 2,
+            "store_id": ["A"] * 7 + ["B"] * 7,
+            "target_cleaned": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0] + [10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0],
+        }
+    )
 
 
 @pytest.fixture
@@ -133,7 +136,12 @@ def test_lightgbm_inference_does_not_output_unseen_value(history_with_features_f
     pred = model.predict(history_with_features_for_lightgbm, horizon=3, config=config_lightgbm)
     assert not any(p == FUTURE_SENTINEL for p in pred["y_pred"])
     assert len(pred) == 3
-    assert "entity_id" in pred.columns and "date" in pred.columns and "y_pred" in pred.columns and "model_name" in pred.columns
+    assert (
+        "entity_id" in pred.columns
+        and "date" in pred.columns
+        and "y_pred" in pred.columns
+        and "model_name" in pred.columns
+    )
 
 
 @pytest.fixture

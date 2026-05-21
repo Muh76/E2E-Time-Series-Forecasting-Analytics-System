@@ -83,16 +83,12 @@ class SeasonalNaiveForecast(BaseForecastingModel):
         rows: list[dict[str, Any]] = []
         if self._entity_col is not None:
             for entity_id, group in history_df.groupby(self._entity_col, sort=False):
-                entity_forecasts = self._forecast_one_series(
-                    group.sort_values(self._date_col), horizon, freq
-                )
+                entity_forecasts = self._forecast_one_series(group.sort_values(self._date_col), horizon, freq)
                 for r in entity_forecasts:
                     r["entity_id"] = entity_id
                     rows.append(r)
         else:
-            entity_forecasts = self._forecast_one_series(
-                history_df.sort_values(self._date_col), horizon, freq
-            )
+            entity_forecasts = self._forecast_one_series(history_df.sort_values(self._date_col), horizon, freq)
             for r in entity_forecasts:
                 r["entity_id"] = None
                 rows.append(r)
@@ -101,9 +97,7 @@ class SeasonalNaiveForecast(BaseForecastingModel):
         out["model_name"] = MODEL_NAME
         return out[["entity_id", "date", "y_pred", "model_name"]]
 
-    def _forecast_one_series(
-        self, group: pd.DataFrame, horizon: int, freq: pd.DateOffset
-    ) -> list[dict[str, Any]]:
+    def _forecast_one_series(self, group: pd.DataFrame, horizon: int, freq: pd.DateOffset) -> list[dict[str, Any]]:
         """Forecast for one entity/series. Requires at least k points. Uses only past data."""
         if len(group) < self._k:
             raise ValueError(

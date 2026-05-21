@@ -138,9 +138,7 @@ def validate_data(
         if n_before > 0:
             ratio = 1.0 - (n_unique / n_before)
             if ratio > max_duplicate_ratio:
-                errors.append(
-                    f"Duplicate (date, series) ratio {ratio:.4f} exceeds max {max_duplicate_ratio}."
-                )
+                errors.append(f"Duplicate (date, series) ratio {ratio:.4f} exceeds max {max_duplicate_ratio}.")
 
     return ValidationResult(
         valid=len(errors) == 0,
@@ -226,9 +224,7 @@ def validate_retail(
 
     # 4. Target non-negative
     if not pd.api.types.is_numeric_dtype(df[target_col]):
-        errors.append(
-            f"Column '{target_col}' must be numeric. Got dtype: {df[target_col].dtype}."
-        )
+        errors.append(f"Column '{target_col}' must be numeric. Got dtype: {df[target_col].dtype}.")
     else:
         neg = (df[target_col] < 0).sum()
         if neg > 0:

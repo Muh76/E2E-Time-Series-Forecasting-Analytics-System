@@ -1,4 +1,5 @@
 """Pytest configuration: add project root to path so tests can import data.* etc."""
+
 import sys
 from pathlib import Path
 

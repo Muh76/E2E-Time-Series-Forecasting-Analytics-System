@@ -128,8 +128,10 @@ def run_pipeline(
 
     # 4. Augment (optional)
     use_timeseries_augment = (augment_cfg or {}).get("timeseries_enabled", False)
-    do_augment = run_augment if run_augment is not None else (
-        (augment_cfg or {}).get("enabled", False) or use_timeseries_augment
+    do_augment = (
+        run_augment
+        if run_augment is not None
+        else ((augment_cfg or {}).get("enabled", False) or use_timeseries_augment)
     )
     if do_augment and augment_cfg:
         logger.info("ETL step: augment")

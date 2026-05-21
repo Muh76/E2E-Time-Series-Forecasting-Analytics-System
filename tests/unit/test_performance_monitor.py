@@ -14,7 +14,6 @@ import pytest
 
 from models.monitoring.performance import PerformanceMonitor
 
-
 # ---------------------------------------------------------------------------
 # Fixtures: synthetic arrays with known outcomes
 # ---------------------------------------------------------------------------
@@ -72,9 +71,7 @@ def two_entities_five_days():
 def test_rolling_window_correctness_perfect_predictions(ten_days_perfect):
     """Last 3 days with perfect predictions -> rolling MAE=0, MAPE=0."""
     y_true, y_pred, dates = ten_days_perfect
-    config = {
-        "monitoring": {"performance": {"window_days": 3, "thresholds": {"mae_alert": 10.0, "mape_alert": 20.0}}}
-    }
+    config = {"monitoring": {"performance": {"window_days": 3, "thresholds": {"mae_alert": 10.0, "mape_alert": 20.0}}}}
     monitor = PerformanceMonitor(config)
     result = monitor.evaluate(y_true, y_pred, dates)
     assert result["rolling_metrics"]["mae"] == 0.0
@@ -86,9 +83,7 @@ def test_rolling_window_correctness_perfect_predictions(ten_days_perfect):
 def test_rolling_window_correctness_known_errors(ten_days_known_errors):
     """Last 3 days: true=[8,9,10], pred=[8,9,12]. MAE=2/3, MAPE from one error."""
     y_true, y_pred, dates = ten_days_known_errors
-    config = {
-        "monitoring": {"performance": {"window_days": 3, "thresholds": {"mae_alert": 10.0, "mape_alert": 50.0}}}
-    }
+    config = {"monitoring": {"performance": {"window_days": 3, "thresholds": {"mae_alert": 10.0, "mape_alert": 50.0}}}}
     monitor = PerformanceMonitor(config)
     result = monitor.evaluate(y_true, y_pred, dates)
     # Last 3: errors 0, 0, 2 -> MAE = 2/3
@@ -106,9 +101,7 @@ def test_rolling_window_correctness_known_errors(ten_days_known_errors):
 def test_alert_triggers_when_mae_exceeds_threshold(ten_days_high_mae):
     """Rolling MAE=9 > mae_alert=5 -> mae alert true."""
     y_true, y_pred, dates = ten_days_high_mae
-    config = {
-        "monitoring": {"performance": {"window_days": 3, "thresholds": {"mae_alert": 5.0, "mape_alert": 1000.0}}}
-    }
+    config = {"monitoring": {"performance": {"window_days": 3, "thresholds": {"mae_alert": 5.0, "mape_alert": 1000.0}}}}
     monitor = PerformanceMonitor(config)
     result = monitor.evaluate(y_true, y_pred, dates)
     assert result["alerts"]["mae"] is True
@@ -136,9 +129,7 @@ def test_alert_triggers_when_mape_exceeds_threshold(ten_days_high_mae):
 def test_no_alert_when_metrics_within_bounds(ten_days_known_errors):
     """Rolling MAE=2/3, MAPE=20; thresholds 10 and 50 -> no alerts."""
     y_true, y_pred, dates = ten_days_known_errors
-    config = {
-        "monitoring": {"performance": {"window_days": 3, "thresholds": {"mae_alert": 10.0, "mape_alert": 50.0}}}
-    }
+    config = {"monitoring": {"performance": {"window_days": 3, "thresholds": {"mae_alert": 10.0, "mape_alert": 50.0}}}}
     monitor = PerformanceMonitor(config)
     result = monitor.evaluate(y_true, y_pred, dates)
     assert result["alerts"]["mae"] is False
@@ -148,9 +139,7 @@ def test_no_alert_when_metrics_within_bounds(ten_days_known_errors):
 def test_no_alert_perfect_predictions(ten_days_perfect):
     """Perfect predictions -> no alerts regardless of thresholds."""
     y_true, y_pred, dates = ten_days_perfect
-    config = {
-        "monitoring": {"performance": {"window_days": 3, "thresholds": {"mae_alert": 0.1, "mape_alert": 0.1}}}
-    }
+    config = {"monitoring": {"performance": {"window_days": 3, "thresholds": {"mae_alert": 0.1, "mape_alert": 0.1}}}}
     monitor = PerformanceMonitor(config)
     result = monitor.evaluate(y_true, y_pred, dates)
     assert result["alerts"]["mae"] is False

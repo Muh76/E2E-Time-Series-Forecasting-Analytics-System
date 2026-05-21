@@ -121,23 +121,16 @@ def load_retail_sales_csv(
 
     missing = [c for c in (date_column, entity_column, target_column) if c not in df.columns]
     if missing:
-        raise ValueError(
-            f"Retail sales CSV missing required columns: {missing}. "
-            f"Found: {list(df.columns)}"
-        )
+        raise ValueError(f"Retail sales CSV missing required columns: {missing}. " f"Found: {list(df.columns)}")
 
     try:
         df[date_column] = pd.to_datetime(df[date_column], utc=False, errors=date_errors)
     except (ValueError, TypeError) as e:
-        raise ValueError(
-            f"Failed to parse date column '{date_column}' in {file_path}: {e}"
-        ) from e
+        raise ValueError(f"Failed to parse date column '{date_column}' in {file_path}: {e}") from e
 
     if date_errors == "coerce" and df[date_column].isna().any():
         bad_count = df[date_column].isna().sum()
-        raise ValueError(
-            f"Date column '{date_column}' has {bad_count} unparseable value(s) in {file_path}"
-        )
+        raise ValueError(f"Date column '{date_column}' has {bad_count} unparseable value(s) in {file_path}")
 
     df = df.sort_values([date_column, entity_column]).reset_index(drop=True)
     return df

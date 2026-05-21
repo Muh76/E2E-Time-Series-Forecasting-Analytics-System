@@ -5,12 +5,12 @@ Runs pipeline with test config, writes parquet, loads and asserts on output.
 No model logic. Low runtime (small fixture).
 """
 
-import pytest
-import pandas as pd
 from pathlib import Path
 
-from data.etl.pipeline import run_pipeline
+import pandas as pd
+import pytest
 
+from data.etl.pipeline import run_pipeline
 
 # Minimal retail CSV: two stores, few days, no gaps (monotonic per entity)
 _MINIMAL_CSV = """date,store_id,target
@@ -50,9 +50,7 @@ def etl_config(raw_csv_path: Path) -> dict:
     }
 
 
-def test_etl_pipeline_run_and_parquet_assertions(
-    raw_csv_path: Path, etl_config: dict, tmp_path: Path
-) -> None:
+def test_etl_pipeline_run_and_parquet_assertions(raw_csv_path: Path, etl_config: dict, tmp_path: Path) -> None:
     """
     Run ETL pipeline with test config, write parquet, load and assert:
     - target_cleaned has no NaNs
@@ -83,6 +81,6 @@ def test_etl_pipeline_run_and_parquet_assertions(
     # 4. Augmentation flags consistent with config (noise_regime_shift enabled)
     assert "augmentation_type" in loaded.columns
     types = loaded["augmentation_type"].astype(str)
-    assert types.str.contains("noise_shift", na=False).any(), (
-        "augmentation_type must contain noise_shift when noise_regime_shift is enabled"
-    )
+    assert types.str.contains(
+        "noise_shift", na=False
+    ).any(), "augmentation_type must contain noise_shift when noise_regime_shift is enabled"
