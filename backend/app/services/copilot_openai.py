@@ -21,6 +21,8 @@ logger = logging.getLogger(__name__)
 
 _MAX_FORECAST_POINTS = 100
 _MAX_JSON_CHARS = 100_000
+# Emit the "no key" warning at most once per process to avoid log spam.
+_openai_key_warned: bool = False
 
 
 def _clip_json(data: Any, max_chars: int = _MAX_JSON_CHARS) -> str:
@@ -67,8 +69,16 @@ async def explain_with_openai(query: str, context: dict[str, Any]) -> dict[str, 
     Call OpenAI Chat Completions with forecast + metrics + drift; return the same
     shape as ``build_structured_copilot_response``, or ``None`` if skipped/failed.
     """
+    global _openai_key_warned
     api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
     if not api_key:
+        if not _openai_key_warned:
+            logger.warning(
+                "copilot_openai: OPENAI_API_KEY is not set; "
+                "all /explain requests will fall back to rule-based insights. "
+                "Set the environment variable to enable OpenAI-powered answers."
+            )
+            _openai_key_warned = True
         return None
 
     model = (os.getenv("OPENAI_COPILOT_MODEL") or "gpt-4o-mini").strip() or "gpt-4o-mini"
