@@ -16,9 +16,25 @@ export default function App() {
     <ErrorBoundary label="Application error">
       <BrowserRouter>
         <Layout>
+          {/* Per-route boundaries: a crash on one page keeps the nav bar
+              and other routes fully functional. */}
           <Routes>
-            <Route path="/forecast" element={<ForecastPage />} />
-            <Route path="/backtest" element={<BacktestPage />} />
+            <Route
+              path="/forecast"
+              element={
+                <ErrorBoundary label="Forecast page error">
+                  <ForecastPage />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/backtest"
+              element={
+                <ErrorBoundary label="Backtest page error">
+                  <BacktestPage />
+                </ErrorBoundary>
+              }
+            />
             <Route path="*" element={<Navigate to="/forecast" replace />} />
           </Routes>
         </Layout>
