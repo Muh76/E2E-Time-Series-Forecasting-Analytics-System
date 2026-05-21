@@ -13,7 +13,7 @@ import time
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 
-from backend.app.api.v1.validators import HORIZON_MAX, HORIZON_MIN, get_valid_store_ids
+from backend.app.api.v1.validators import HORIZON_MAX, HORIZON_MIN, validate_store_id
 from backend.app.services.forecasting_service import get_store_last_date
 from backend.app.services.model_loader import get_model_metadata, load_feature_columns, load_primary_model
 from backend.app.services.prediction_pipeline import execute_store_forecast
@@ -35,13 +35,7 @@ class ForecastRequest(BaseModel):
     @field_validator("store_id")
     @classmethod
     def store_must_exist(cls, v: int) -> int:
-        valid = get_valid_store_ids()
-        if valid and v not in valid:
-            raise ValueError(
-                f"store_id={v} does not exist in the dataset. "
-                f"Valid range: {min(valid)}–{max(valid)} ({len(valid)} stores)."
-            )
-        return v
+        return validate_store_id(v)
 
 
 class ForecastResponse(BaseModel):
