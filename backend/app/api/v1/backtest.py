@@ -11,7 +11,7 @@ import logging
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 
-from backend.app.api.v1.validators import HORIZON_MAX, HORIZON_MIN, N_SPLITS_MAX, N_SPLITS_MIN, get_valid_store_ids
+from backend.app.api.v1.validators import HORIZON_MAX, HORIZON_MIN, N_SPLITS_MAX, N_SPLITS_MIN, validate_store_id
 from backend.app.services.backtest_service import backtest_store
 from backend.app.services.model_loader import get_model_metadata, load_primary_model
 from backend.app.services.monitoring_service import update_monitoring_from_backtest
@@ -39,13 +39,7 @@ class BacktestRequest(BaseModel):
     @field_validator("store_id")
     @classmethod
     def store_must_exist(cls, v: int) -> int:
-        valid = get_valid_store_ids()
-        if valid and v not in valid:
-            raise ValueError(
-                f"store_id={v} does not exist in the dataset. "
-                f"Valid range: {min(valid)}–{max(valid)} ({len(valid)} stores)."
-            )
-        return v
+        return validate_store_id(v)
 
 
 class SplitMetrics(BaseModel):
