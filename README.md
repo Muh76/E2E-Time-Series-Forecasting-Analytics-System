@@ -239,12 +239,50 @@ This measures how the fixed production model generalizes across different time p
 ### Prerequisites
 
 - Python 3.11+
-- Raw data in `data/raw/` (Rossmann store sales dataset)
+- A [Kaggle account](https://www.kaggle.com) (free) to download the dataset
+
+### 0. Get the data
+
+The system is built on the [Rossmann Store Sales](https://www.kaggle.com/competitions/rossmann-store-sales/data) competition dataset. Raw CSVs go in `data/raw/` (gitignored).
+
+**Automated — Kaggle CLI (recommended):**
+
+```bash
+pip install kaggle
+cp .env.example .env          # then fill in KAGGLE_USERNAME and KAGGLE_KEY
+python scripts/download_data.py
+```
+
+Your Kaggle API key is at [kaggle.com/settings](https://www.kaggle.com/settings) → API → Create New Token. The downloaded `kaggle.json` can also be placed at `~/.kaggle/kaggle.json` instead of using `.env`.
+
+**Manual — browser download:**
+
+```bash
+python scripts/download_data.py --manual
+```
+
+This prints step-by-step instructions to download the files from the Kaggle web UI and place them in `data/raw/`.
+
+**Expected files after download:**
+
+```
+data/raw/
+├── train.csv            (~38 MB)
+├── store.csv            (~1 MB)
+├── test.csv             (~4 MB)
+└── sample_submission.csv
+```
+
+You can verify the files are correct at any time:
+
+```bash
+python scripts/download_data.py --validate-only
+```
 
 ### 1. Install dependencies
 
 ```bash
-pip install pandas numpy lightgbm scikit-learn joblib pyyaml fastapi uvicorn requests
+pip install -r requirements.txt
 ```
 
 ### 2. Run ETL pipeline
