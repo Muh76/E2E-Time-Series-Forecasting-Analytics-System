@@ -1,3 +1,13 @@
+# Hooks run locally on every commit (install with: pre-commit install).
+# The CI Format Check job runs `pre-commit run --all-files` on every push
+# and pull request, so formatting violations block the entire pipeline.
+#
+# To auto-fix locally before pushing:
+#   pre-commit run --all-files
+#
+# To install hooks so they run automatically on git commit:
+#   pre-commit install
+
 repos:
   - repo: https://github.com/psf/black
     rev: 24.10.0
