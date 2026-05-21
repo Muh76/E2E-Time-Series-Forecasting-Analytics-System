@@ -25,6 +25,11 @@ _MAX_JSON_CHARS = 100_000
 _openai_key_warned: bool = False
 
 
+def is_openai_configured() -> bool:
+    """Return True when OPENAI_API_KEY is present and non-empty in the environment."""
+    return bool((os.getenv("OPENAI_API_KEY") or "").strip())
+
+
 def _clip_json(data: Any, max_chars: int = _MAX_JSON_CHARS) -> str:
     raw = json.dumps(data, indent=2, default=str)
     if len(raw) <= max_chars:
