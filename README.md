@@ -176,13 +176,15 @@ curl -X POST http://localhost:8000/api/v1/backtest/store \
   "detail": [
     {
       "field": "store_id",
-      "message": "Value error, store_id=9999 does not exist in the dataset. Valid range: 1–1115 (1115 stores).",
+      "message": "Value error, store_id=9999 does not exist in the dataset. Valid range: 1–N (N stores).",
       "type": "value_error",
       "input": 9999
     }
   ]
 }
 ```
+
+> The range and count in the message are derived at runtime from the processed dataset, so they stay correct if the dataset is replaced or extended.
 
 ---
 
