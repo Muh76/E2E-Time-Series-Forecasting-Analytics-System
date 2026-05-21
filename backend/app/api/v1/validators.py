@@ -59,3 +59,23 @@ HORIZON_MIN = 1
 HORIZON_MAX = 60
 N_SPLITS_MIN = 1
 N_SPLITS_MAX = 20
+
+
+def validate_store_id(v: int) -> int:
+    """
+    Validate that store_id exists in the processed dataset.
+
+    Raises ValueError with a message that reflects the actual store count
+    and ID range loaded from the parquet file, so the message stays correct
+    if the dataset is replaced or extended.
+
+    Returns the value unchanged when the store ID set is empty (parquet not
+    yet available), allowing the request to proceed rather than blocking it.
+    """
+    valid = get_valid_store_ids()
+    if valid and v not in valid:
+        raise ValueError(
+            f"store_id={v} does not exist in the dataset. "
+            f"Valid range: {min(valid)}–{max(valid)} ({len(valid)} stores)."
+        )
+    return v
