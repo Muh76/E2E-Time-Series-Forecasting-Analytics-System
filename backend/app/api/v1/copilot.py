@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 from backend.app.services.copilot_context import enrich_context_with_latest_forecast
 from backend.app.services.copilot_explain import build_structured_copilot_response
 from backend.app.services.copilot_forecast_insights import build_forecast_insights
-from backend.app.services.copilot_openai import explain_with_openai
+from backend.app.services.copilot_openai import explain_with_openai, is_openai_configured
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +104,15 @@ async def explain(body: CopilotExplainRequest | None = None) -> dict:
         generator = "rules"
 
     latency_ms = round((time.perf_counter() - t0) * 1000, 2)
+
+    openai_skipped = use_openai and generator == "rules"
+    openai_skip_reason: str | None = None
+    if openai_skipped:
+        if not is_openai_configured():
+            openai_skip_reason = "OPENAI_API_KEY not set"
+        else:
+            openai_skip_reason = "openai_request_failed"
+
     sources = list(out["sources"])
 
     if generator == "openai":
@@ -134,4 +143,6 @@ async def explain(body: CopilotExplainRequest | None = None) -> dict:
         "sources": sources,
         "generated_at": generated_at,
         "generator": generator,
+        "openai_skipped": openai_skipped,
+        "openai_skip_reason": openai_skip_reason,
     }
