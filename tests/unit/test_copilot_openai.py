@@ -4,7 +4,12 @@ import asyncio
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from backend.app.services.copilot_openai import _pack_llm_payload, explain_with_openai
+import backend.app.services.copilot_openai as _copilot_openai_mod
+from backend.app.services.copilot_openai import (
+    _pack_llm_payload,
+    explain_with_openai,
+    is_openai_configured,
+)
 
 
 def test_pack_llm_truncates_long_forecast():
@@ -31,6 +36,31 @@ def test_explain_openai_returns_none_without_api_key():
 
     with patch.dict(os.environ, {"OPENAI_API_KEY": ""}):
         asyncio.run(_run())
+
+
+def test_explain_openai_warns_when_key_absent():
+    """A WARNING must be emitted (once) when OPENAI_API_KEY is missing."""
+    # Reset the per-process flag so the warning fires in this test run.
+    _copilot_openai_mod._openai_key_warned = False
+
+    async def _run() -> None:
+        await explain_with_openai("Trend?", {})
+
+    with patch.dict(os.environ, {"OPENAI_API_KEY": ""}):
+        with patch.object(_copilot_openai_mod.logger, "warning") as mock_warn:
+            asyncio.run(_run())
+            mock_warn.assert_called_once()
+            assert "OPENAI_API_KEY" in mock_warn.call_args[0][0]
+
+
+def test_is_openai_configured_true_when_key_present():
+    with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test-key"}):
+        assert is_openai_configured() is True
+
+
+def test_is_openai_configured_false_when_key_absent():
+    with patch.dict(os.environ, {"OPENAI_API_KEY": ""}):
+        assert is_openai_configured() is False
 
 
 def test_explain_openai_parses_successful_response():
