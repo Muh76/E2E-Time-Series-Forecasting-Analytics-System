@@ -43,6 +43,7 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    needs: format
     steps:
       - uses: actions/checkout@v6
 
@@ -246,7 +247,7 @@ jobs:
     name: Docker Build
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: lint
+    needs: [format, lint]
     steps:
       - uses: actions/checkout@v6
 
