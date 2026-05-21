@@ -351,6 +351,7 @@ All pipeline parameters are in `config/base/default.yaml`. Environment overrides
 ├── artifacts/                  Training outputs (gitignored)
 │   └── models/                 .joblib models, feature_columns.json, model_metadata.json, metrics.json
 ├── scripts/                    Executable entry points
+│   ├── download_data.py        Download Rossmann dataset via Kaggle CLI or print manual instructions
 │   ├── run_etl.py              Run the full ETL pipeline
 │   ├── train.py                Train LightGBM + baseline, save artifacts and metadata
 │   ├── inference.py            CLI batch inference
@@ -371,6 +372,7 @@ All pipeline parameters are in `config/base/default.yaml`. Environment overrides
 ├── copilot/                    LLM agents and prompt templates
 ├── tests/                      Unit, integration, and e2e tests
 ├── docs/                       Architecture and API contract documentation
+├── .env.example                Template for all required and optional environment variables
 └── infra/                      GCP Terraform and deployment configuration
 ```
 
@@ -382,7 +384,7 @@ All pipeline parameters are in `config/base/default.yaml`. Environment overrides
 | `frontend/` | Streamlit-based dashboard for interactive exploration — store-level forecasting, backtesting, EDA, and an LLM copilot that explains (but never generates) predictions. |
 | `src/` | React/TypeScript SPA built with Vite. Provides a typed API client, Recharts-based forecast visualization with confidence bands, and a live API health indicator. |
 | `artifacts/` | Gitignored output of the training pipeline. Contains serialized models, feature column lists, model metadata (version, metrics, training dates), and evaluation metrics. Loaded by the backend at startup. |
-| `scripts/` | Standalone CLI entry points for ETL, training, inference, and smoke testing. Designed to run in CI or locally with no import side-effects. |
+| `scripts/` | Standalone CLI entry points for data download, ETL, training, inference, and smoke testing. Designed to run in CI or locally with no import side-effects. |
 | `.github/` | GitHub Actions CI pipeline. Jobs: Python linting (flake8), pytest, model training with artifact and feature-consistency validation, API smoke tests against a live server, frontend TypeScript/Vite build, and Docker image build on `main`. |
 
 ---
