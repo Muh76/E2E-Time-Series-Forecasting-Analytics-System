@@ -113,6 +113,117 @@ export interface ModelMetadata {
 }
 
 // ---------------------------------------------------------------------------
+// Monitoring
+// ---------------------------------------------------------------------------
+
+export interface MonitoringPerformance {
+  mae: number | null;
+  rmse: number | null;
+  mape: number | null;
+  sample_size: number;
+  source?: string;
+}
+
+export interface MonitoringDriftIndicator {
+  feature: string;
+  score: number;
+}
+
+export interface MonitoringDrift {
+  status: string;
+  last_checked: string;
+  indicators: MonitoringDriftIndicator[];
+  overall_score: number | null;
+  threshold: number;
+  per_feature_scores: Record<string, number>;
+}
+
+export interface MonitoringPipeline {
+  last_training: string | null;
+  last_etl: string | null;
+  status: string;
+}
+
+export interface MonitoringAlerts {
+  mae: boolean;
+  mape: boolean;
+  drift: boolean;
+}
+
+export interface MonitoringThresholds {
+  mae_alert: number;
+  mape_alert: number;
+  drift_threshold: number;
+}
+
+export interface MonitoringRollingSeries {
+  mae: { date: string; value: number }[];
+  mape: { date: string; value: number }[];
+}
+
+export interface MonitoringSummary {
+  model_version: string;
+  as_of: string;
+  performance: MonitoringPerformance;
+  drift: MonitoringDrift;
+  pipeline: MonitoringPipeline;
+  rolling_series: MonitoringRollingSeries;
+  alerts: MonitoringAlerts;
+  thresholds: MonitoringThresholds;
+  overall_status: string;
+}
+
+// ---------------------------------------------------------------------------
+// Copilot
+// ---------------------------------------------------------------------------
+
+export interface CopilotSource {
+  type: string;
+  note?: string;
+}
+
+export interface CopilotExplainRequest {
+  query: string;
+  context?: Record<string, unknown>;
+  options?: Record<string, unknown>;
+}
+
+export interface CopilotExplainResponse {
+  answer: string;
+  reasoning: string;
+  confidence: number;
+  intents: string[];
+  explanation: string;
+  sources: CopilotSource[];
+  generated_at: string;
+  generator: string;
+  openai_skipped: boolean;
+  openai_skip_reason: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Chat
+// ---------------------------------------------------------------------------
+
+export interface ChatSource {
+  source: string;
+  header: string;
+  score: number;
+}
+
+export interface ChatRequest {
+  message: string;
+}
+
+export interface ChatResponse {
+  status: string;
+  message_received: string;
+  reply: string;
+  sources: ChatSource[];
+  generated_at: string;
+}
+
+// ---------------------------------------------------------------------------
 // Validation Error (structured 422)
 // ---------------------------------------------------------------------------
 

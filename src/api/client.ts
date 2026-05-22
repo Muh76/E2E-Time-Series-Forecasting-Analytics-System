@@ -2,10 +2,15 @@ import axios, { AxiosError, type AxiosInstance } from "axios";
 import type {
   BacktestRequest,
   BacktestResponse,
+  ChatRequest,
+  ChatResponse,
+  CopilotExplainRequest,
+  CopilotExplainResponse,
   ForecastDebugResponse,
   ForecastRequest,
   ForecastResponse,
   ModelMetadata,
+  MonitoringSummary,
   ValidationErrorItem,
 } from "../types/api";
 
@@ -81,6 +86,21 @@ export async function postForecastDebug(request: ForecastRequest): Promise<Forec
 
 export async function postBacktest(request: BacktestRequest): Promise<BacktestResponse> {
   const { data } = await api.post<BacktestResponse>("/api/v1/backtest/store", request);
+  return data;
+}
+
+export async function getMonitoringSummary(): Promise<MonitoringSummary> {
+  const { data } = await api.get<MonitoringSummary>("/api/v1/monitoring/summary");
+  return data;
+}
+
+export async function postCopilotExplain(request: CopilotExplainRequest): Promise<CopilotExplainResponse> {
+  const { data } = await api.post<CopilotExplainResponse>("/api/v1/copilot/explain", request);
+  return data;
+}
+
+export async function postChatQuery(request: ChatRequest): Promise<ChatResponse> {
+  const { data } = await api.post<ChatResponse>("/api/v1/chat/query", request);
   return data;
 }
 
