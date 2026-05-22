@@ -110,7 +110,12 @@ monitoring:
     check_schedule: "0 6 * * *"  # cron: daily 06:00
   alerts:
     cooldown_minutes: 60
-    channels: []        # e.g. ["slack", "email"]; configure per env
+    channels: []        # e.g. ["slack", "email", "pagerduty"]; configure per env
+    # Channel secrets — set the corresponding env vars, never put values here:
+    #   slack:      SLACK_WEBHOOK_URL
+    #   email:      SMTP_HOST, SMTP_PORT (default 587), SMTP_USER, SMTP_PASSWORD,
+    #               ALERT_EMAIL_FROM, ALERT_EMAIL_TO
+    #   pagerduty:  PAGERDUTY_INTEGRATION_KEY
 
 # ---------------------------------------------------------------------------
 # LLM settings (copilot — explanation only, no prediction)
