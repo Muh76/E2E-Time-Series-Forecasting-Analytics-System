@@ -19,6 +19,7 @@ from typing import Any
 import yaml
 
 from backend.app.runtime_paths import base_default_config_path, env_config_path, monitoring_state_json_path
+from backend.app.services.alert_dispatcher import dispatch_alerts
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,14 @@ def _thresholds_from_config(cfg: dict[str, Any]) -> dict[str, float]:
         "mape_alert": mape_alert,
         "drift_threshold": drift_th,
     }
+
+
+def _alert_channels_from_config(cfg: dict[str, Any]) -> list[str]:
+    return list((cfg.get("monitoring") or {}).get("alerts", {}).get("channels") or [])
+
+
+def _cooldown_minutes_from_config(cfg: dict[str, Any]) -> float:
+    return float(((cfg.get("monitoring") or {}).get("alerts") or {}).get("cooldown_minutes", 60))
 
 
 def _compute_alerts(
@@ -232,6 +241,23 @@ def initialize_monitoring_state() -> None:
         drift.get("drift_detected"),
     )
 
+    channels = _alert_channels_from_config(cfg)
+    cooldown = _cooldown_minutes_from_config(cfg)
+    context = {
+        "mae": mae_f,
+        "mape": mape_f,
+        "drift_score": drift.get("overall_score"),
+        "mae_threshold": thresholds["mae_alert"],
+        "mape_threshold": thresholds["mape_alert"],
+        "drift_threshold": thresholds["drift_threshold"],
+        "model_version": version,
+    }
+    last_dispatched = state.get("last_dispatched") or {}
+    updated_dispatched = dispatch_alerts(alerts, context, channels, last_dispatched, cooldown)
+    if updated_dispatched != last_dispatched:
+        state["last_dispatched"] = updated_dispatched
+        set_monitoring_state(state)
+
 
 def _build_empty_state_from_error(message: str) -> dict[str, Any]:
     cfg = _load_merged_config()
@@ -349,6 +375,23 @@ def update_monitoring_from_backtest(
         rmse,
         mae,
     )
+
+    channels = _alert_channels_from_config(cfg)
+    cooldown = _cooldown_minutes_from_config(cfg)
+    context = {
+        "mae": mae,
+        "mape": mape_f,
+        "drift_score": drift.get("overall_score"),
+        "mae_threshold": thresholds["mae_alert"],
+        "mape_threshold": thresholds["mape_alert"],
+        "drift_threshold": thresholds["drift_threshold"],
+        "model_version": version,
+    }
+    last_dispatched = (_monitoring_state or {}).get("last_dispatched") or {}
+    updated_dispatched = dispatch_alerts(alerts, context, channels, last_dispatched, cooldown)
+    if updated_dispatched != last_dispatched:
+        state["last_dispatched"] = updated_dispatched
+        set_monitoring_state(state)
 
 
 def get_monitoring_summary() -> dict[str, Any]:
