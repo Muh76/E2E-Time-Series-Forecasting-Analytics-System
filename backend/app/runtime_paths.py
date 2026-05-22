@@ -86,3 +86,11 @@ def rolling_performance_json_path() -> Path:
     if p:
         return Path(p).expanduser().resolve()
     return project_root() / "data" / "monitoring" / "rolling_performance.json"
+
+
+def monitoring_state_json_path() -> Path:
+    """Persisted monitoring state — survives server restarts (gitignored)."""
+    p = os.environ.get("E2E_MONITORING_STATE_JSON", "").strip()
+    if p:
+        return Path(p).expanduser().resolve()
+    return project_root() / "data" / "monitoring" / "monitoring_state.json"

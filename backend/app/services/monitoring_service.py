@@ -9,14 +9,16 @@ stable summary shape for GET /api/v1/monitoring/summary.
 from __future__ import annotations
 
 import copy
+import json
 import logging
 import math
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import yaml
 
-from backend.app.runtime_paths import base_default_config_path, env_config_path
+from backend.app.runtime_paths import base_default_config_path, env_config_path, monitoring_state_json_path
 
 logger = logging.getLogger(__name__)
 
@@ -120,9 +122,34 @@ def get_stubbed_summary() -> dict[str, Any]:
     }
 
 
+def _load_state_from_disk() -> dict[str, Any] | None:
+    """Return the previously persisted monitoring state, or None if unavailable."""
+    path: Path = monitoring_state_json_path()
+    if not path.exists():
+        return None
+    try:
+        with path.open() as f:
+            return json.load(f)
+    except Exception as exc:
+        logger.warning("monitoring_service: could not load persisted state from %s: %s", path, exc)
+        return None
+
+
+def _save_state_to_disk(state: dict[str, Any]) -> None:
+    """Write monitoring state to disk; errors are non-fatal."""
+    path: Path = monitoring_state_json_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w") as f:
+            json.dump(state, f, indent=2, default=str)
+    except Exception as exc:
+        logger.warning("monitoring_service: could not persist state to %s: %s", path, exc)
+
+
 def set_monitoring_state(summary: dict[str, Any]) -> None:
     global _monitoring_state
     _monitoring_state = summary
+    _save_state_to_disk(summary)
 
 
 def initialize_monitoring_state() -> None:
@@ -186,6 +213,16 @@ def initialize_monitoring_state() -> None:
         },
         "recent_activity": {},
     }
+    # Restore accumulated rolling series from previous runs so history
+    # is not lost on restart. Current metrics always come from fresh metadata.
+    saved = _load_state_from_disk()
+    if saved:
+        saved_rolling = (saved.get("performance") or {}).get("rolling_series") or {}
+        if saved_rolling.get("mae") or saved_rolling.get("mape"):
+            state["performance"]["rolling_series"] = saved_rolling
+            logger.info("monitoring_service: restored rolling series from disk (%d MAE entries)", len(saved_rolling.get("mae") or []))
+        state["last_dispatched"] = saved.get("last_dispatched") or {}
+
     set_monitoring_state(state)
     logger.info(
         "Monitoring seeded from metadata: version=%s mae=%s mape=%s drift=%s",

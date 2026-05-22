@@ -20,6 +20,7 @@ data/processed/*
 data/feature_store/*
 !data/feature_store/.gitkeep
 data/monitoring/rolling_performance.json
+data/monitoring/monitoring_state.json
 artifacts/*
 !artifacts/.gitkeep
 
