@@ -2,7 +2,11 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Layout from "./components/Layout";
 import BacktestPage from "./pages/BacktestPage";
+import ChatPage from "./pages/ChatPage";
+import CopilotPage from "./pages/CopilotPage";
+import EDAPage from "./pages/EDAPage";
 import ForecastPage from "./pages/ForecastPage";
+import MonitoringPage from "./pages/MonitoringPage";
 
 console.info(
   `[App] env=${import.meta.env.VITE_APP_ENV ?? import.meta.env.MODE}, ` +
@@ -32,6 +36,38 @@ export default function App() {
               element={
                 <ErrorBoundary label="Backtest page error">
                   <BacktestPage />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/monitoring"
+              element={
+                <ErrorBoundary label="Monitoring page error">
+                  <MonitoringPage />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/copilot"
+              element={
+                <ErrorBoundary label="Copilot page error">
+                  <CopilotPage />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/eda"
+              element={
+                <ErrorBoundary label="EDA page error">
+                  <EDAPage />
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="/chat"
+              element={
+                <ErrorBoundary label="Chat page error">
+                  <ChatPage />
                 </ErrorBoundary>
               }
             />
